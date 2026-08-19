@@ -5,6 +5,7 @@ from sqlalchemy import create_engine, Column, Integer, BigInteger, String, DateT
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker, relationship
 from datetime import datetime
+from sqlalchemy import BigInteger
 import pytz
 from config import config
 
