@@ -136,37 +136,50 @@ class DB:
             session.close()
     
     @staticmethod
-    def subscribe_user(chat_id: int) -> bool:
-        """Subscribe user to notifications. Returns False if already subscribed
-        (or user not found) so callers can tell the difference from a fresh
-        subscription and avoid redundant writes."""
+    def subscribe_user(chat_id: int) -> str:
+        """Subscribe user and return the result state."""
         session = SessionLocal()
+
         try:
-            user = session.query(User).filter(User.chat_id == chat_id).first()
+            user = session.query(User).filter(
+                User.chat_id == chat_id
+            ).first()
+
             if not user:
-                return False
+                return "not_found"
+
             if user.is_subscribed:
-                return False  # already subscribed, nothing to do
+                return "already_subscribed"
+
             user.is_subscribed = True
             session.commit()
-            return True
+
+            return "subscribed"
+
         finally:
             session.close()
-    
+
     @staticmethod
-    def unsubscribe_user(chat_id: int) -> bool:
-        """Unsubscribe user from notifications. Returns False if already
-        unsubscribed (or user not found)."""
+    def unsubscribe_user(chat_id: int) -> str:
+        """Unsubscribe user and return the result state."""
         session = SessionLocal()
+
         try:
-            user = session.query(User).filter(User.chat_id == chat_id).first()
+            user = session.query(User).filter(
+                User.chat_id == chat_id
+            ).first()
+
             if not user:
-                return False
+                return "not_found"
+
             if not user.is_subscribed:
-                return False  # already unsubscribed, nothing to do
+                return "already_unsubscribed"
+
             user.is_subscribed = False
             session.commit()
-            return True
+
+            return "unsubscribed"
+
         finally:
             session.close()
     

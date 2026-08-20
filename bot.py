@@ -109,46 +109,67 @@ async def subscribe(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     chat_id = update.effective_chat.id
 
-    if DB.subscribe_user(chat_id):
+    result = DB.subscribe_user(chat_id)
+
+    if result == "subscribed":
         message = (
             "✅ *Başarıyla Abone Oldunuz!*\n\n"
             "Artık FIRST hibe duyurularını anında alacaksınız.\n"
-            "Bildirimleri durdurmak için *❌ Abone Olmaktan Çık* butonuna tıklayın."
+            "Bildirimleri durdurmak için *❌ Abone Olmaktan Çık* "
+            "butonuna tıklayın."
         )
 
         print(f"✅ User {chat_id} subscribed")
 
+    elif result == "already_subscribed":
+        message = (
+            "ℹ️ *Zaten Abonesiniz!*\n\n"
+            "Yeni hibe duyurularını almaya devam edeceksiniz."
+        )
+
     else:
-        message = "ℹ️ Zaten abone oldunuz."
+        message = (
+            "❌ Kullanıcı kaydı bulunamadı.\n"
+            "Lütfen önce /start komutunu kullanın."
+        )
 
     await update.message.reply_text(
         message,
         parse_mode="Markdown"
     )
-
 
 async def unsubscribe(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handle unsubscribe command"""
 
     chat_id = update.effective_chat.id
 
-    if DB.unsubscribe_user(chat_id):
+    result = DB.unsubscribe_user(chat_id)
+
+    if result == "unsubscribed":
         message = (
-            "✅ *Abone Olmaktan Çıkıldı*\n\n"
+            "✅ *Abonelikten Çıkıldı*\n\n"
             "Artık hibe bildirimlerini almayacaksınız.\n"
             "Tekrar abone olmak için *📨 Abone Ol* butonuna tıklayın."
         )
 
         print(f"✅ User {chat_id} unsubscribed")
 
+    elif result == "already_unsubscribed":
+        message = (
+            "ℹ️ *Zaten Abone Değilsiniz!*\n\n"
+            "Yeni hibe bildirimleri almıyorsunuz."
+        )
+
     else:
-        message = "ℹ️ Daha önce abone olmamışsınız."
+        message = (
+            "❌ Kullanıcı kaydı bulunamadı.\n"
+            "Lütfen önce /start komutunu kullanın."
+        )
 
     await update.message.reply_text(
         message,
         parse_mode="Markdown"
     )
-
 
 def format_duration(delta_seconds: float) -> str:
     """Format a duration in seconds as a human-readable Turkish string"""
