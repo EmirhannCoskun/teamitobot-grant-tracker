@@ -1,19 +1,21 @@
 """
 Web scraper for FIRST Robotics grant opportunities
 """
+
 import requests
 from bs4 import BeautifulSoup
+from datetime import datetime
+import pytz
+
 from config import config
+
+
+TURKEY_TZ = pytz.timezone("Europe/Istanbul")
 
 
 class Scraper:
     """FIRST website scraper"""
-    
-    KEYWORDS = [
-        "grant", "team", "first", "opportunity",
-        "funding", "frc", "scholarship", "award"
-    ]
-    
+
     HEADERS = {
         "User-Agent": (
             "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
@@ -21,55 +23,126 @@ class Scraper:
             "Chrome/124.0.0.0 Safari/537.36"
         )
     }
-    
+
     @staticmethod
     def scrape() -> list:
-        """Scrape grants from FIRST website"""
+        """Scrape currently active FRC grants from FIRST website"""
+
         try:
             print(f"🔍 Scraping {config.GRANT_URL}...")
-            
+
             response = requests.get(
                 config.GRANT_URL,
                 headers=Scraper.HEADERS,
                 timeout=config.REQUEST_TIMEOUT
             )
+
             response.raise_for_status()
-            
+
             soup = BeautifulSoup(response.text, "html.parser")
-            raw_texts = []
 
-            # Extract text from relevant elements
-            for element in soup.select("h1, h2, h3, h4, .field-content, p, a, .opportunity"):
-                text = element.get_text(strip=True)
-                # Normalize whitespace so the same content scraped with
-                # slightly different spacing doesn't count as a "new" grant.
-                text = " ".join(text.split())
-
-                # Filter by content
-                if text and 15 < len(text) < 500:
-                    if any(kw in text.lower() for kw in Scraper.KEYWORDS):
-                        raw_texts.append(text)
-
-            # Remove exact duplicates first
-            candidates = list(set(raw_texts))
-
-            # Remove near-duplicates: our selector list overlaps on purpose
-            # (e.g. a heading AND the link inside it both match), so the same
-            # grant can be captured twice with slightly different text. If
-            # one captured text is fully contained inside a longer captured
-            # text, keep only the longer one.
-            candidates.sort(key=len, reverse=True)
             grants = []
-            for text in candidates:
-                if not any(text in kept for kept in grants):
-                    grants.append(text)
+            today = datetime.now(TURKEY_TZ).date()
 
-            print(f"✅ Scraped {len(grants)} unique grants")
+            # Each grant is represented by a card-header containing
+            # the grant name, programs and dates.
+            for card in soup.select(".card-header"):
+
+                # ------------------------------------------
+                # 1. Grant name
+                # ------------------------------------------
+
+                name_element = card.select_one("h3.grant-name")
+
+                if not name_element:
+                    continue
+
+                name = " ".join(name_element.stripped_strings)
+
+                if not name:
+                    continue
+
+                # ------------------------------------------
+                # 2. Check whether grant is for FRC
+                # ------------------------------------------
+
+                frc_program = card.select_one(
+                    ".grant-programs .program-tag.frc"
+                )
+
+                if not frc_program:
+                    continue
+
+                # ------------------------------------------
+                # 3. Extract dates
+                # ------------------------------------------
+
+                date_items = card.select(".grant-dates .date-item")
+
+                start_date = None
+                end_date = None
+
+                for date_item in date_items:
+
+                    text = " ".join(date_item.stripped_strings)
+
+                    if text.startswith("Start:"):
+                        date_text = text.replace("Start:", "").strip()
+
+                        try:
+                            start_date = datetime.strptime(
+                                date_text,
+                                "%m/%d/%Y"
+                            ).date()
+                        except ValueError:
+                            pass
+
+                    elif text.startswith("End:"):
+                        date_text = text.replace("End:", "").strip()
+
+                        try:
+                            end_date = datetime.strptime(
+                                date_text,
+                                "%m/%d/%Y"
+                            ).date()
+                        except ValueError:
+                            pass
+
+                # If we can't determine the dates, don't include
+                # the grant. This prevents false positives.
+                if not start_date or not end_date:
+                    continue
+
+                # ------------------------------------------
+                # 4. Check whether grant is currently active
+                # ------------------------------------------
+
+                if not (start_date <= today <= end_date):
+                    continue
+
+                # ------------------------------------------
+                # 5. Avoid duplicates
+                # ------------------------------------------
+
+                if name not in grants:
+                    grants.append(name)
+
+            print(f"📅 Today: {today.strftime('%Y-%m-%d')}")
+            print(f"✅ Scraped {len(grants)} active FRC grants")
+
+            for grant in grants:
+                print(f"   • {grant}")
+
             return grants
-            
+
         except requests.exceptions.Timeout:
             print("❌ Scraper timeout")
             return []
+
+        except requests.exceptions.RequestException as e:
+            print(f"❌ Request error: {e}")
+            return []
+
         except Exception as e:
             print(f"❌ Scraper error: {e}")
             return []
