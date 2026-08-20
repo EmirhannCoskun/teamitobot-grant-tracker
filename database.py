@@ -72,6 +72,7 @@ class Stats(Base):
     total_notifications = Column(Integer, default=0)
     total_users = Column(Integer, default=0)
     started_at = Column(DateTime, default=lambda: datetime.now(TURKEY_TZ))
+    last_scrape_at = Column(DateTime, nullable=True)
 
 
 # ==========================================
@@ -276,12 +277,13 @@ class DB:
     
     @staticmethod
     def increment_scrapes():
-        """Increment scrape counter"""
+        """Increment scrape counter and record the time of this scrape"""
         session = SessionLocal()
         try:
             stats = session.query(Stats).first()
             if stats:
                 stats.total_scrapes += 1
+                stats.last_scrape_at = datetime.now(TURKEY_TZ)
                 session.commit()
         finally:
             session.close()
@@ -318,12 +320,19 @@ class DB:
         try:
             stats = session.query(Stats).first()
             if not stats:
-                return {"scrapes": 0, "notifications": 0, "users": 0}
+                return {
+                    "scrapes": 0,
+                    "notifications": 0,
+                    "users": 0,
+                    "started": None,
+                    "last_scrape": None,
+                }
             return {
                 "scrapes": stats.total_scrapes,
                 "notifications": stats.total_notifications,
                 "users": stats.total_users,
-                "started": stats.started_at
+                "started": stats.started_at,
+                "last_scrape": stats.last_scrape_at,
             }
         finally:
             session.close()

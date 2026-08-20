@@ -150,13 +150,43 @@ async def unsubscribe(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
 
 
+def format_duration(delta_seconds: float) -> str:
+    """Format a duration in seconds as a human-readable Turkish string"""
+    total_seconds = int(max(0, delta_seconds))
+    days, rem = divmod(total_seconds, 86400)
+    hours, rem = divmod(rem, 3600)
+    minutes, _ = divmod(rem, 60)
+
+    parts = []
+    if days:
+        parts.append(f"{days} gün")
+    if hours or days:
+        parts.append(f"{hours} saat")
+    parts.append(f"{minutes} dk")
+    return " ".join(parts)
+
+
 async def status(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handle /status command"""
 
     stats = DB.get_stats_dict()
 
+    now = datetime.now(TURKEY_TZ)
+
+    if stats["started"]:
+        uptime_text = format_duration((now - stats["started"]).total_seconds())
+    else:
+        uptime_text = "bilinmiyor"
+
+    if stats["last_scrape"]:
+        last_scrape_text = stats["last_scrape"].strftime("%d.%m.%Y %H:%M:%S")
+    else:
+        last_scrape_text = "henüz tarama yapılmadı"
+
     message = (
         "🟢 *İtobot Hibe Takipçisi Aktif!*\n\n"
+        f"⏱️ *Çalışma Süresi:* `{uptime_text}`\n"
+        f"🕐 *Son Tarama:* `{last_scrape_text}`\n"
         f"🔍 *Toplam Tarama:* `{stats['scrapes']}` kez\n"
         f"🚨 *Bildirimlendirilen Hibeler:* `{stats['notifications']}` adet\n"
         f"👥 *Aktif Kullanıcı:* `{stats['users']}` kişi\n"
@@ -306,6 +336,11 @@ async def scrape_and_notify_loop(application):
                             f"🚨 Found {len(new_grants)} new grants!"
                         )
 
+                        # Persist all new grants once (not per-user, per-grant)
+                        grant_objects = [
+                            DB.add_grant(text) for text in new_grants
+                        ]
+
                         subscribed_users = DB.get_subscribed_users()
 
                         if subscribed_users:
@@ -353,18 +388,17 @@ async def scrape_and_notify_loop(application):
                                         disable_web_page_preview=True
                                     )
 
-                                    for grant_text in new_grants:
+                                    for grant in grant_objects:
 
-                                        grant = DB.add_grant(
-                                            grant_text
-                                        )
-
-                                        DB.add_notification(
+                                        # Only bump the counter when a new
+                                        # notification row is actually
+                                        # created, otherwise the stat drifts
+                                        # higher than the real count.
+                                        if DB.add_notification(
                                             chat_id,
                                             grant.id
-                                        )
-
-                                        DB.increment_notifications()
+                                        ):
+                                            DB.increment_notifications()
 
                                 except Exception as e:
 
@@ -372,10 +406,6 @@ async def scrape_and_notify_loop(application):
                                         f"❌ Error sending to "
                                         f"{chat_id}: {e}"
                                     )
-
-                        # Add new grants to database
-                        for grant_text in new_grants:
-                            DB.add_grant(grant_text)
 
                     else:
                         print("✅ No new grants found")
