@@ -136,49 +136,50 @@ class DB:
             session.close()
     
     @staticmethod
-    def subscribe_user(chat_id: int) -> bool:
-        """Subscribe user. Returns True only when subscription changes."""
+    def subscribe_user(chat_id: int) -> str:
+        """Subscribe user and return the result state."""
         session = SessionLocal()
 
         try:
             user = session.query(User).filter(
-                User.chat_id == chat_id
+            User.chat_id == chat_id
             ).first()
 
             if not user:
-                return False
+                return "not_found"
 
             if user.is_subscribed:
-                return False
+                return "already_subscribed"
 
             user.is_subscribed = True
             session.commit()
 
-            return True
+            return "subscribed"
 
         finally:
             session.close()
 
+
     @staticmethod
-    def unsubscribe_user(chat_id: int) -> bool:
-        """Unsubscribe user. Returns True only when subscription changes."""
+    def unsubscribe_user(chat_id: int) -> str:
+        """Unsubscribe user and return the result state."""
         session = SessionLocal()
 
         try:
             user = session.query(User).filter(
-                User.chat_id == chat_id
+            User.chat_id == chat_id
             ).first()
 
             if not user:
-                return False
+                return "not_found"
 
             if not user.is_subscribed:
-                return False
+                return "already_unsubscribed"
 
             user.is_subscribed = False
             session.commit()
 
-            return True
+            return "unsubscribed"
 
         finally:
             session.close()

@@ -123,11 +123,14 @@ async def subscribe(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     else:
         message = (
-            "❌ Kullanıcı kaydı bulunamadı.\n" "Lütfen önce /start komutunu kullanın."
+            "❌ Kullanıcı kaydı bulunamadı.\n\n"
+            "Lütfen önce /start komutunu gönderin."
         )
 
-    await update.message.reply_text(message, parse_mode="Markdown")
-
+    await update.message.reply_text(
+        message,
+        parse_mode="Markdown"
+    )
 
 async def unsubscribe(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handle unsubscribe command"""
@@ -140,23 +143,28 @@ async def unsubscribe(update: Update, context: ContextTypes.DEFAULT_TYPE):
         message = (
             "✅ *Abonelikten Çıkıldı*\n\n"
             "Artık hibe bildirimlerini almayacaksınız.\n"
-            "Tekrar abone olmak için *📨 Abone Ol* butonuna tıklayın."
+            "Tekrar bildirim almak için *📨 Abone Ol* "
+            "butonuna tıklayabilirsiniz."
         )
 
         print(f"✅ User {chat_id} unsubscribed")
 
     elif result == "already_unsubscribed":
         message = (
-            "ℹ️ *Zaten Abone Değilsiniz!*\n\n" "Yeni hibe bildirimleri almıyorsunuz."
+            "ℹ️ *Zaten Abone Değilsiniz!*\n\n"
+            "Şu anda hibe bildirimi almıyorsunuz."
         )
 
     else:
         message = (
-            "❌ Kullanıcı kaydı bulunamadı.\n" "Lütfen önce /start komutunu kullanın."
+            "❌ Kullanıcı kaydı bulunamadı.\n\n"
+            "Lütfen önce /start komutunu gönderin."
         )
 
-    await update.message.reply_text(message, parse_mode="Markdown")
-
+    await update.message.reply_text(
+        message,
+        parse_mode="Markdown"
+    )
 
 def format_duration(delta_seconds: float) -> str:
     """Format a duration in seconds as a human-readable Turkish string"""
