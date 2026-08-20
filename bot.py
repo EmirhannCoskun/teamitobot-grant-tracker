@@ -173,13 +173,29 @@ async def status(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     now = datetime.now(TURKEY_TZ)
 
-    if stats["started"]:
-        uptime_text = format_duration((now - stats["started"]).total_seconds())
+    # PostgreSQL'den gelen datetime timezone bilgisini
+    # kaybetmişse İstanbul timezone'ı olarak kabul et.
+    started_at = stats["started"]
+
+    if started_at:
+        if started_at.tzinfo is None:
+            started_at = TURKEY_TZ.localize(started_at)
+
+        uptime_text = format_duration(
+            (now - started_at).total_seconds()
+        )
     else:
         uptime_text = "bilinmiyor"
 
-    if stats["last_scrape"]:
-        last_scrape_text = stats["last_scrape"].strftime("%d.%m.%Y %H:%M:%S")
+    last_scrape_at = stats["last_scrape"]
+
+    if last_scrape_at:
+        if last_scrape_at.tzinfo is None:
+            last_scrape_at = TURKEY_TZ.localize(last_scrape_at)
+
+        last_scrape_text = last_scrape_at.strftime(
+            "%d.%m.%Y %H:%M:%S"
+        )
     else:
         last_scrape_text = "henüz tarama yapılmadı"
 
