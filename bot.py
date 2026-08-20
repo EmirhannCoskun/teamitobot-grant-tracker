@@ -382,13 +382,13 @@ async def scrape_and_notify_loop(application):
                                         disable_web_page_preview=True,
                                     )
 
-                                    for grant in grant_ids:
+                                    for grant_id in grant_ids:
 
                                         # Only bump the counter when a new
                                         # notification row is actually
                                         # created, otherwise the stat drifts
                                         # higher than the real count.
-                                        if DB.add_notification(chat_id, grant.id):
+                                        if DB.add_notification(chat_id, grant_id):
                                             DB.increment_notifications()
 
                                 except Exception as e:
