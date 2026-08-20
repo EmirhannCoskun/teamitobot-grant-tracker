@@ -209,18 +209,24 @@ class DB:
     # ========== GRANT OPERATIONS ==========
     
     @staticmethod
-    def add_grant(text: str) -> Grant:
-        """Add grant to database"""
+    def add_grant(text: str) -> int:
+        """Add grant and return its database ID."""
         session = SessionLocal()
+
         try:
-            existing = session.query(Grant).filter(Grant.text == text).first()
+            existing = session.query(Grant).filter(
+            Grant.text == text
+            ).first()
+
             if existing:
-                return existing
-            
+                return existing.id
+
             grant = Grant(text=text)
             session.add(grant)
             session.commit()
-            return grant
+
+            return grant.id
+
         finally:
             session.close()
     
