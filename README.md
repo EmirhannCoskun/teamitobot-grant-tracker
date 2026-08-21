@@ -50,7 +50,7 @@ Kullanıcıların kod üzerinde herhangi bir değişiklik yapmasına gerek yoktu
 ### 30 saniyede başla:
 
 ```text
-1. Telegram'da @itobot_grant_tracker_bot hesabını bul
+1. Telegram'da arama kısmına @itobot_grant_tracker_bot yaz
 2. /start komutunu gönder
 3. "📨 Abone Ol" butonuna bas
 4. Tamamlandı! ✅
