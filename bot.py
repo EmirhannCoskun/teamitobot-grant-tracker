@@ -195,7 +195,9 @@ async def status(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     if started_at:
         if started_at.tzinfo is None:
-            started_at = TURKEY_TZ.localize(started_at)
+            started_at = pytz.UTC.localize(started_at)
+
+        started_at = started_at.astimezone(TURKEY_TZ)
 
         uptime_text = format_duration((now - started_at).total_seconds())
     else:
@@ -205,7 +207,9 @@ async def status(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     if last_scrape_at:
         if last_scrape_at.tzinfo is None:
-            last_scrape_at = TURKEY_TZ.localize(last_scrape_at)
+            last_scrape_at = pytz.UTC.localize(last_scrape_at)
+
+        last_scrape_at = last_scrape_at.astimezone(TURKEY_TZ)
 
         last_scrape_text = last_scrape_at.strftime("%d.%m.%Y %H:%M:%S")
     else:
