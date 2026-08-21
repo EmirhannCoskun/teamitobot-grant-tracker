@@ -250,8 +250,13 @@ async def stats(update: Update, context: ContextTypes.DEFAULT_TYPE):
     uptime_text = "Bilinmiyor"
 
     if system_stats["started"]:
+        started_at = system_stats["started"]
+
+        if started_at.tzinfo is None:
+            started_at = TURKEY_TZ.localize(started_at)
+
         uptime_seconds = (
-            datetime.now(TURKEY_TZ) - system_stats["started"]
+            datetime.now(TURKEY_TZ) - started_at
         ).total_seconds()
 
         uptime_text = format_duration(uptime_seconds)
