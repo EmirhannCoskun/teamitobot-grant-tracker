@@ -1,11 +1,21 @@
 """
 Database models and operations
 """
-from sqlalchemy import create_engine, Column, Integer, BigInteger, String, DateTime, Boolean, ForeignKey
+from sqlalchemy import (
+    create_engine,
+    Column,
+    Integer,
+    BigInteger,
+    String,
+    DateTime,
+    Boolean,
+    ForeignKey,
+    UniqueConstraint
+)
 from sqlalchemy.ext.declarative import declarative_base
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import sessionmaker, relationship
 from datetime import datetime
-from sqlalchemy import BigInteger
 import pytz
 from config import config
 
@@ -50,15 +60,21 @@ class Grant(Base):
 
 
 class Notification(Base):
-    """Notification model - tracks sent notifications"""
     __tablename__ = "notifications"
-    
+
     id = Column(Integer, primary_key=True)
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
     grant_id = Column(Integer, ForeignKey("grants.id"), nullable=False)
-    sent_at = Column(DateTime, default=lambda: datetime.now(TURKEY_TZ))
-    
-    # Relationships
+    sent_at = Column(DateTime, nullable=True)
+
+    __table_args__ = (
+        UniqueConstraint(
+            "user_id",
+            "grant_id",
+            name="uq_notification_user_grant"
+        ),
+    )
+
     user = relationship("User", back_populates="notifications")
     grant = relationship("Grant", back_populates="notifications")
 
@@ -176,6 +192,11 @@ class DB:
             if not user.is_subscribed:
                 return "already_unsubscribed"
 
+            session.query(Notification).filter(
+            Notification.user_id == user.id,
+            Notification.sent_at.is_(None)
+            ).delete(synchronize_session=False)
+
             user.is_subscribed = False
             session.commit()
 
@@ -239,31 +260,6 @@ class DB:
     # ========== NOTIFICATION OPERATIONS ==========
     
     @staticmethod
-    def add_notification(chat_id: int, grant_id: int) -> bool:
-        """Record notification"""
-        session = SessionLocal()
-        try:
-            user = session.query(User).filter(User.chat_id == chat_id).first()
-            if not user:
-                return False
-            
-            # Check if already sent
-            existing = session.query(Notification).filter(
-                Notification.user_id == user.id,
-                Notification.grant_id == grant_id
-            ).first()
-            
-            if existing:
-                return False
-            
-            notification = Notification(user_id=user.id, grant_id=grant_id)
-            session.add(notification)
-            session.commit()
-            return True
-        finally:
-            session.close()
-    
-    @staticmethod
     def get_user_notification_count(chat_id: int) -> int:
         """Get notification count for user"""
         session = SessionLocal()
@@ -271,7 +267,110 @@ class DB:
             user = session.query(User).filter(User.chat_id == chat_id).first()
             if not user:
                 return 0
-            return session.query(Notification).filter(Notification.user_id == user.id).count()
+            return session.query(Notification).filter(
+                Notification.user_id == user.id,
+                Notification.sent_at.is_not(None)
+                ).count()
+        finally:
+            session.close()
+            
+    @staticmethod
+    def create_pending_notification(chat_id: int, grant_id: int) -> bool:
+        """Create a pending notification if one does not already exist."""
+        session = SessionLocal()
+
+        try:
+            user = session.query(User).filter(
+            User.chat_id == chat_id
+            ).first()
+
+            if not user:
+                return False
+
+            existing = session.query(Notification).filter(
+            Notification.user_id == user.id,
+            Notification.grant_id == grant_id
+            ).first()
+
+            if existing:
+                return False
+
+            notification = Notification(
+            user_id=user.id,
+            grant_id=grant_id,
+            sent_at=None
+            )
+
+            session.add(notification)
+
+            try:
+                session.commit()
+            except IntegrityError:
+                session.rollback()
+                return False
+
+            return True
+
+        finally:
+            session.close()
+
+    @staticmethod
+    def get_pending_notifications() -> list:
+        """Get all pending notifications for active subscribed users."""
+        session = SessionLocal()
+
+        try:
+            rows = (
+                session.query(
+                    Notification.id,
+                    Notification.grant_id,
+                    User.chat_id,
+                    Grant.text
+                )
+                .join(User, Notification.user_id == User.id)
+                .join(Grant, Notification.grant_id == Grant.id)
+                .filter(
+                    Notification.sent_at.is_(None),
+                    User.is_active.is_(True),
+                    User.is_subscribed.is_(True)
+                )
+                .all()
+            )
+
+            return [
+                {
+                    "notification_id": notification_id,
+                    "grant_id": grant_id,
+                    "chat_id": chat_id,
+                    "grant_text": grant_text,
+                }
+                for notification_id, grant_id, chat_id, grant_text in rows
+            ]
+
+        finally:
+            session.close()
+
+    @staticmethod
+    def mark_notification_sent(notification_id: int) -> bool:
+        """Mark a notification as successfully sent."""
+        session = SessionLocal()
+
+        try:
+            notification = session.query(Notification).filter(
+                Notification.id == notification_id
+            ).first()
+
+            if not notification:
+                return False
+
+            if notification.sent_at is not None:
+                return False
+
+            notification.sent_at = datetime.now(TURKEY_TZ)
+            session.commit()
+
+            return True
+
         finally:
             session.close()
     

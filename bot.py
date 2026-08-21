@@ -314,7 +314,7 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 async def scrape_and_notify_loop(application):
-    """Main grant scraping loop"""
+    """Main grant scraping and notification loop"""
 
     global last_scrape_time
 
@@ -331,43 +331,108 @@ async def scrape_and_notify_loop(application):
                     f"{datetime.now(TURKEY_TZ).strftime('%H:%M:%S')}"
                 )
 
+                # ==========================================
+                # SCRAPE CURRENT GRANTS
+                # ==========================================
+
                 current_grants = Scraper.scrape()
 
                 DB.increment_scrapes()
 
                 if current_grants:
 
-                    known_grants = [g.text for g in DB.get_all_grants()]
+                    known_grants = [
+                        grant.text
+                        for grant in DB.get_all_grants()
+                    ]
 
-                    new_grants = [g for g in current_grants if g not in known_grants]
+                    new_grants = [
+                        grant
+                        for grant in current_grants
+                        if grant not in known_grants
+                    ]
+
+                    # ==========================================
+                    # CREATE NEW GRANTS + PENDING NOTIFICATIONS
+                    # ==========================================
 
                     if new_grants:
 
-                        print(f"🚨 Found {len(new_grants)} new grants!")
-
-                        # Persist all new grants once (not per-user, per-grant)
-                        grant_ids = [DB.add_grant(text) for text in new_grants]
+                        print(
+                            f"🚨 Found {len(new_grants)} new grants!"
+                        )
 
                         subscribed_users = DB.get_subscribed_users()
 
-                        if subscribed_users:
+                        for grant_text in new_grants:
 
-                            message = (
-                                "🚨 *FIRST SİTESİNDE YENİ HİBE " "BİLDİRİMİ!* 🚨\n\n"
-                            )
+                            grant_id = DB.add_grant(grant_text)
 
-                            for i, grant in enumerate(new_grants[:5], 1):
+                            for chat_id in subscribed_users:
 
-                                grant_text = (
-                                    grant[:80] + "..." if len(grant) > 80 else grant
+                                DB.create_pending_notification(
+                                    chat_id,
+                                    grant_id
                                 )
 
-                                message += f"{i}. *{grant_text}*\n"
+                    else:
 
-                            if len(new_grants) > 5:
+                        print("✅ No new grants found")
+
+                # ==========================================
+                # SEND PENDING NOTIFICATIONS
+                # ==========================================
+
+                pending_notifications = DB.get_pending_notifications()
+
+                if pending_notifications:
+
+                    notifications_by_user = {}
+
+                    for notification in pending_notifications:
+
+                        chat_id = notification["chat_id"]
+
+                        if chat_id not in notifications_by_user:
+                            notifications_by_user[chat_id] = []
+
+                        notifications_by_user[chat_id].append(
+                            notification
+                        )
+
+                    for chat_id, notifications in notifications_by_user.items():
+
+                        # Telegram mesajını maksimum 5 hibe
+                        # içerecek şekilde parçalara ayır.
+                        for start_index in range(
+                            0,
+                            len(notifications),
+                            5
+                        ):
+
+                            batch = notifications[
+                                start_index:start_index + 5
+                            ]
+
+                            message = (
+                                "🚨 *FIRST SİTESİNDE YENİ HİBE "
+                                "BİLDİRİMİ!* 🚨\n\n"
+                            )
+
+                            for index, notification in enumerate(
+                                batch,
+                                1
+                            ):
+
+                                grant_text = notification["grant_text"]
+
+                                if len(grant_text) > 80:
+                                    grant_text = (
+                                        grant_text[:80] + "..."
+                                    )
 
                                 message += (
-                                    f"\n... ve " f"{len(new_grants) - 5} tane daha\n"
+                                    f"{index}. *{grant_text}*\n"
                                 )
 
                             message += (
@@ -375,32 +440,43 @@ async def scrape_and_notify_loop(application):
                                 f"({config.GRANT_URL})"
                             )
 
-                            for chat_id in subscribed_users:
+                            try:
 
-                                try:
+                                await application.bot.send_message(
+                                    chat_id=chat_id,
+                                    text=message,
+                                    parse_mode="Markdown",
+                                    disable_web_page_preview=True,
+                                )
 
-                                    await application.bot.send_message(
-                                        chat_id=chat_id,
-                                        text=message,
-                                        parse_mode="Markdown",
-                                        disable_web_page_preview=True,
-                                    )
+                                # Telegram mesajı başarıyla
+                                # kabul ettiyse notification'ları
+                                # gönderildi olarak işaretle.
+                                for notification in batch:
 
-                                    for grant_id in grant_ids:
+                                    if DB.mark_notification_sent(
+                                        notification["notification_id"]
+                                    ):
+                                        DB.increment_notifications()
 
-                                        # Only bump the counter when a new
-                                        # notification row is actually
-                                        # created, otherwise the stat drifts
-                                        # higher than the real count.
-                                        if DB.add_notification(chat_id, grant_id):
-                                            DB.increment_notifications()
+                                print(
+                                    f"✅ Sent {len(batch)} notification(s) "
+                                    f"to user {chat_id}"
+                                )
 
-                                except Exception as e:
+                            except Exception as e:
 
-                                    print(f"❌ Error sending to " f"{chat_id}: {e}")
+                                print(
+                                    f"❌ Error sending notification to "
+                                    f"{chat_id}: {e}"
+                                )
 
-                    else:
-                        print("✅ No new grants found")
+                                # sent_at değiştirilmez.
+                                # Böylece sonraki taramada tekrar denenir.
+
+                # ==========================================
+                # UPDATE USER COUNT
+                # ==========================================
 
                 DB.update_user_count()
 
@@ -409,7 +485,9 @@ async def scrape_and_notify_loop(application):
             await asyncio.sleep(2)
 
         except asyncio.CancelledError:
+
             print("🛑 Scrape loop cancelled.")
+
             raise
 
         except Exception as e:
