@@ -27,3 +27,6 @@ logs/
 # OS
 .DS_Store
 Thumbs.db
+
+#DATABASE YEDEĞİ
+frc-grant-tracker-backup.dump
