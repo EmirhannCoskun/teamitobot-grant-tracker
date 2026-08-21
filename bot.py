@@ -35,7 +35,6 @@ last_scrape_time = time.time()
 # HTTP HEALTH CHECK (For Render)
 # ==========================================
 
-
 class HealthHandler(BaseHTTPRequestHandler):
     """Health check handler"""
 
@@ -64,14 +63,13 @@ def start_health_server():
 # TELEGRAM BOT HANDLERS
 # ==========================================
 
-
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handle /start command - User registration"""
 
     chat_id = update.effective_chat.id
     username = update.effective_user.username
 
-    user = DB.add_or_get_user(chat_id, username)
+    DB.add_or_get_user(chat_id, username)
 
     keyboard = [
         ["📨 Abone Ol", "❌ Abone Olmaktan Çık"],
@@ -80,7 +78,9 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     ]
 
     reply_markup = ReplyKeyboardMarkup(
-        keyboard, resize_keyboard=True, one_time_keyboard=False
+        keyboard,
+        resize_keyboard=True,
+        one_time_keyboard=False
     )
 
     message = (
@@ -92,7 +92,9 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
 
     await update.message.reply_text(
-        message, reply_markup=reply_markup, parse_mode="Markdown"
+        message,
+        reply_markup=reply_markup,
+        parse_mode="Markdown"
     )
 
     print(f"✅ User {chat_id} started bot")
@@ -132,6 +134,7 @@ async def subscribe(update: Update, context: ContextTypes.DEFAULT_TYPE):
         parse_mode="Markdown"
     )
 
+
 async def unsubscribe(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handle unsubscribe command"""
 
@@ -166,66 +169,49 @@ async def unsubscribe(update: Update, context: ContextTypes.DEFAULT_TYPE):
         parse_mode="Markdown"
     )
 
+
 def format_duration(delta_seconds: float) -> str:
     """Format a duration in seconds as a human-readable Turkish string"""
+
     total_seconds = int(max(0, delta_seconds))
+
     days, rem = divmod(total_seconds, 86400)
     hours, rem = divmod(rem, 3600)
     minutes, _ = divmod(rem, 60)
 
     parts = []
+
     if days:
         parts.append(f"{days} gün")
+
     if hours or days:
         parts.append(f"{hours} saat")
+
     parts.append(f"{minutes} dk")
+
     return " ".join(parts)
 
 
 async def status(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Handle /status command"""
+    """Handle /status command - Show personal bot status"""
 
-    stats = DB.get_stats_dict()
+    chat_id = update.effective_chat.id
 
-    now = datetime.now(TURKEY_TZ)
-
-    # PostgreSQL'den gelen datetime timezone bilgisini
-    # kaybetmişse İstanbul timezone'ı olarak kabul et.
-    started_at = stats["started"]
-
-    if started_at:
-        if started_at.tzinfo is None:
-            started_at = pytz.UTC.localize(started_at)
-
-        started_at = started_at.astimezone(TURKEY_TZ)
-
-        uptime_text = format_duration((now - started_at).total_seconds())
-    else:
-        uptime_text = "bilinmiyor"
-
-    last_scrape_at = stats["last_scrape"]
-
-    if last_scrape_at:
-        if last_scrape_at.tzinfo is None:
-            last_scrape_at = pytz.UTC.localize(last_scrape_at)
-
-        last_scrape_at = last_scrape_at.astimezone(TURKEY_TZ)
-
-        last_scrape_text = last_scrape_at.strftime("%d.%m.%Y %H:%M:%S")
-    else:
-        last_scrape_text = "henüz tarama yapılmadı"
+    user_stats = DB.get_user_stats(chat_id)
 
     message = (
-        "🟢 *İtobot Hibe Takipçisi Aktif!*\n\n"
-        f"⏱️ *Çalışma Süresi:* `{uptime_text}`\n"
-        f"🕐 *Son Tarama:* `{last_scrape_text}`\n"
-        f"🔍 *Toplam Tarama:* `{stats['scrapes']}` kez\n"
-        f"🚨 *Bildirimlendirilen Hibeler:* `{stats['notifications']}` adet\n"
-        f"👥 *Aktif Kullanıcı:* `{stats['users']}` kişi\n"
+        "🟢 *İtobot Durumu*\n\n"
+        f"🔍 *Sizin Tarama Sayınız:* `{user_stats['scrapes']}` kez\n"
+        f"🚨 *Aldığınız Hibe Bildirimi:* `{user_stats['notifications']}` adet\n"
+        f"🔔 *Abonelik Durumu:* "
+        f"{'✅ Aktif' if user_stats['subscribed'] else '❌ Pasif'}\n\n"
         "🟢 *Sistem:* Stabil & Aktif"
     )
 
-    await update.message.reply_text(message, parse_mode="Markdown")
+    await update.message.reply_text(
+        message,
+        parse_mode="Markdown"
+    )
 
 
 async def next_check(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -246,7 +232,10 @@ async def next_check(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "💡 *Bilgi:* Site 15 dakikada bir taranıp yeni hibe var mı kontrol ediliyor."
     )
 
-    await update.message.reply_text(message, parse_mode="Markdown")
+    await update.message.reply_text(
+        message,
+        parse_mode="Markdown"
+    )
 
 
 async def stats(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -254,17 +243,20 @@ async def stats(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     chat_id = update.effective_chat.id
 
-    notification_count = DB.get_user_notification_count(chat_id)
-    is_subscribed = DB.is_subscribed(chat_id)
+    user_stats = DB.get_user_stats(chat_id)
 
     message = (
         "📊 *Kişisel İstatistikleriniz*\n\n"
-        f"📨 *Aldığınız Bildirim:* `{notification_count}` adet\n"
+        f"🔍 *Yaptığınız Tarama:* `{user_stats['scrapes']}` kez\n"
+        f"📨 *Aldığınız Bildirim:* `{user_stats['notifications']}` adet\n"
         f"🔔 *Abone Durumu:* "
-        f"{'✅ Aktif' if is_subscribed else '❌ Pasif'}"
+        f"{'✅ Aktif' if user_stats['subscribed'] else '❌ Pasif'}"
     )
 
-    await update.message.reply_text(message, parse_mode="Markdown")
+    await update.message.reply_text(
+        message,
+        parse_mode="Markdown"
+    )
 
 
 async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -275,13 +267,16 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "🔹 *📨 Abone Ol* - Yeni hibe bildirimlerini almaya başla\n"
         "🔹 *❌ Abone Olmaktan Çık* - Bildirimler almayı durdur\n"
         "🔹 *⏱️ Sonraki Tarama* - Bir sonraki site kontrolüne kalan süreyi göster\n"
-        "🔹 *📈 İstatistik* - Senin kişisel istatistiklerini göster\n"
-        "🔹 *🟢 Durum* - Bot durumunu ve toplam istatistikleri göster\n"
+        "🔹 *📈 İstatistik* - Kişisel istatistiklerini göster\n"
+        "🔹 *🟢 Durum* - Kişisel bot durumunu göster\n"
         "🔹 *❓ Yardım* - Bu yardım menüsünü görüntüle\n\n"
         "💡 Herhangi bir sorunla karşılaşırsan lütfen bot yöneticisine bildir."
     )
 
-    await update.message.reply_text(message, parse_mode="Markdown")
+    await update.message.reply_text(
+        message,
+        parse_mode="Markdown"
+    )
 
 
 async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -312,7 +307,6 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
 # GRANT SCRAPING & NOTIFICATION LOOP
 # ==========================================
 
-
 async def scrape_and_notify_loop(application):
     """Main grant scraping and notification loop"""
 
@@ -337,7 +331,11 @@ async def scrape_and_notify_loop(application):
 
                 current_grants = Scraper.scrape()
 
+                # Global sistem istatistiği
                 DB.increment_scrapes()
+
+                # Her aktif kullanıcının kişisel tarama sayısı
+                DB.increment_user_scrapes()
 
                 if current_grants:
 
@@ -408,8 +406,6 @@ async def scrape_and_notify_loop(application):
 
                     for chat_id, notifications in notifications_by_user.items():
 
-                        # Telegram mesajını maksimum 5 hibe
-                        # içerecek şekilde parçalara ayır.
                         for start_index in range(
                             0,
                             len(notifications),
@@ -441,10 +437,15 @@ async def scrape_and_notify_loop(application):
                                         f"   🔗 [Başvuru Linki]({notification['grant_url']})\n"
                                     )
 
-                                if notification["start_date"] and notification["end_date"]:
+                                if (
+                                    notification["start_date"]
+                                    and notification["end_date"]
+                                ):
                                     message += (
-                                        f"   📅 {notification['start_date'].strftime('%d.%m.%Y')}"
-                                        f" → {notification['end_date'].strftime('%d.%m.%Y')}\n"
+                                        f"   📅 "
+                                        f"{notification['start_date'].strftime('%d.%m.%Y')}"
+                                        f" → "
+                                        f"{notification['end_date'].strftime('%d.%m.%Y')}\n"
                                     )
 
                                 message += "\n"
@@ -458,9 +459,6 @@ async def scrape_and_notify_loop(application):
                                     disable_web_page_preview=True,
                                 )
 
-                                # Telegram mesajı başarıyla
-                                # kabul ettiyse notification'ları
-                                # gönderildi olarak işaretle.
                                 for notification in batch:
 
                                     if DB.mark_notification_sent(
@@ -479,9 +477,6 @@ async def scrape_and_notify_loop(application):
                                     f"❌ Error sending notification to "
                                     f"{chat_id}: {e}"
                                 )
-
-                                # sent_at değiştirilmez.
-                                # Böylece sonraki taramada tekrar denenir.
 
                 # ==========================================
                 # UPDATE USER COUNT
@@ -510,7 +505,6 @@ async def scrape_and_notify_loop(application):
 # MAIN BOT APPLICATION
 # ==========================================
 
-
 async def main():
     """Main bot function"""
 
@@ -535,16 +529,24 @@ async def main():
     # ==========================================
 
     app.add_handler(CommandHandler("start", start))
-
     app.add_handler(CommandHandler("help", help_command))
+    app.add_handler(CommandHandler("status", status))
 
-    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text))
+    app.add_handler(
+        MessageHandler(
+            filters.TEXT & ~filters.COMMAND,
+            handle_text
+        )
+    )
 
     # ==========================================
     # HEALTH SERVER
     # ==========================================
 
-    health_thread = threading.Thread(target=start_health_server, daemon=True)
+    health_thread = threading.Thread(
+        target=start_health_server,
+        daemon=True
+    )
 
     health_thread.start()
 
@@ -574,21 +576,18 @@ async def main():
     loop = asyncio.get_running_loop()
 
     def handle_shutdown(signum, frame):
-        """
-        Handle SIGTERM/SIGINT.
-
-        Render sends SIGTERM when stopping the service.
-        """
+        """Handle SIGTERM/SIGINT."""
 
         signal_name = signal.Signals(signum).name
 
-        print(f"\n🛑 Received {signal_name}. " f"Starting graceful shutdown...")
+        print(
+            f"\n🛑 Received {signal_name}. "
+            f"Starting graceful shutdown..."
+        )
 
         loop.call_soon_threadsafe(stop_event.set)
 
-    # Register signals
     signal.signal(signal.SIGTERM, handle_shutdown)
-
     signal.signal(signal.SIGINT, handle_shutdown)
 
     # ==========================================
@@ -604,19 +603,20 @@ async def main():
             await app.initialize()
             await app.start()
 
-            # Start scraping loop
-            scrape_task = asyncio.create_task(scrape_and_notify_loop(app))
-
-            # Start Telegram polling
-            await app.updater.start_polling(
-                allowed_updates=Update.ALL_TYPES, timeout=30, drop_pending_updates=True
+            scrape_task = asyncio.create_task(
+                scrape_and_notify_loop(app)
             )
 
-            print("🤖 Bot polling started, " "listening for commands...")
+            await app.updater.start_polling(
+                allowed_updates=Update.ALL_TYPES,
+                timeout=30,
+                drop_pending_updates=True
+            )
 
-            # ==========================================
-            # KEEP PROCESS ALIVE
-            # ==========================================
+            print(
+                "🤖 Bot polling started, "
+                "listening for commands..."
+            )
 
             await stop_event.wait()
 
@@ -632,10 +632,6 @@ async def main():
 
             print("\n🛑 Stopping bot gracefully...")
 
-            # ==========================================
-            # STOP TELEGRAM POLLING FIRST
-            # ==========================================
-
             try:
 
                 if app.updater.running:
@@ -647,10 +643,6 @@ async def main():
             except Exception as e:
 
                 print(f"❌ Error stopping polling: {e}")
-
-            # ==========================================
-            # STOP SCRAPER TASK
-            # ==========================================
 
             if scrape_task:
 
@@ -665,10 +657,6 @@ async def main():
                 except asyncio.CancelledError:
 
                     pass
-
-            # ==========================================
-            # STOP TELEGRAM APPLICATION
-            # ==========================================
 
             try:
 

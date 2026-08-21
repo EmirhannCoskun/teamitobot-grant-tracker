@@ -36,10 +36,18 @@ class User(Base):
     username = Column(String(255), nullable=True)
     is_active = Column(Boolean, default=True)
     is_subscribed = Column(Boolean, default=False)
-    created_at = Column(DateTime, default=lambda: datetime.now(TURKEY_TZ))
+    total_scrapes = Column(Integer, default=0, nullable=False)
+
+    created_at = Column(
+        DateTime,
+        default=lambda: datetime.now(TURKEY_TZ)
+    )
     
-    # Relationships
-    notifications = relationship("Notification", back_populates="user", cascade="all, delete-orphan")
+    notifications = relationship(
+        "Notification",
+        back_populates="user",
+        cascade="all, delete-orphan"
+    )
     
     def __repr__(self):
         return f"<User chat_id={self.chat_id}>"
@@ -244,7 +252,8 @@ class DB:
             return user.is_subscribed if user else False
         finally:
             session.close()
-    
+            
+               
     # ========== GRANT OPERATIONS ==========
     
     @staticmethod
@@ -312,6 +321,56 @@ class DB:
                 Notification.user_id == user.id,
                 Notification.sent_at.is_not(None)
                 ).count()
+        finally:
+            session.close()
+            
+    @staticmethod
+    def increment_user_scrape(chat_id: int):
+        """Increment scrape count for a specific user."""
+        session = SessionLocal()
+
+        try:
+            user = session.query(User).filter(
+                User.chat_id == chat_id
+            ).first()
+
+            if not user:
+                return
+
+            user.total_scrapes += 1
+            session.commit()
+
+        finally:
+            session.close()
+              
+    @staticmethod
+    def get_user_stats(chat_id: int) -> dict:
+        """Get statistics for a specific user."""
+        session = SessionLocal()
+
+        try:
+            user = session.query(User).filter(
+                User.chat_id == chat_id
+            ).first()
+
+            if not user:
+                return {
+                    "scrapes": 0,
+                    "notifications": 0,
+                    "subscribed": False,
+                }
+
+            notification_count = session.query(Notification).filter(
+                Notification.user_id == user.id,
+                Notification.sent_at.is_not(None)
+            ).count()
+
+            return {
+                "scrapes": user.total_scrapes,
+                "notifications": notification_count,
+                "subscribed": user.is_subscribed,
+            }
+
         finally:
             session.close()
             
