@@ -261,11 +261,19 @@ async def stats(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         uptime_text = format_duration(uptime_seconds)
 
-    # Son tarama zamanını formatla
+    # Son tarama zamanını Türkiye saatine çevir
     last_scrape_text = "Henüz tarama yapılmadı"
 
     if system_stats["last_scrape"]:
-        last_scrape_text = system_stats["last_scrape"].strftime(
+        last_scrape = system_stats["last_scrape"]
+
+        # Veritabanındaki zaman UTC ise Türkiye saatine çevir
+        if last_scrape.tzinfo is None:
+            last_scrape = pytz.utc.localize(last_scrape)
+
+        last_scrape = last_scrape.astimezone(TURKEY_TZ)
+
+        last_scrape_text = last_scrape.strftime(
             "%d.%m.%Y %H:%M:%S"
         )
 
