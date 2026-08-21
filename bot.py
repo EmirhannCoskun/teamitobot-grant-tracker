@@ -38,10 +38,24 @@ last_scrape_time = time.time()
 class HealthHandler(BaseHTTPRequestHandler):
     """Health check handler"""
 
-    def do_GET(self):
+    def _send_health_response(self):
         self.send_response(200)
+        self.send_header("Content-Type", "text/plain")
+        self.send_header("Content-Length", "2")
         self.end_headers()
-        self.wfile.write(b"Bot is running!")
+        self.wfile.write(b"OK")
+
+    def do_GET(self):
+        self._send_health_response()
+
+    def do_HEAD(self):
+        self.send_response(200)
+        self.send_header("Content-Type", "text/plain")
+        self.send_header("Content-Length", "2")
+        self.end_headers()
+
+    def do_POST(self):
+        self._send_health_response()
 
     def log_message(self, format, *args):
         pass
