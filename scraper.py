@@ -26,7 +26,7 @@ class Scraper:
 
     @staticmethod
     def scrape() -> list:
-        """Scrape currently active FRC grants from FIRST website"""
+        """Scrape currently active FRC grants from FIRST website."""
 
         try:
             print(f"🔍 Scraping {config.GRANT_URL}...")
@@ -45,7 +45,7 @@ class Scraper:
             today = datetime.now(TURKEY_TZ).date()
 
             # Each grant is represented by a card-header containing
-            # the grant name, programs and dates.
+            # the grant name, programs, dates and application link.
             for card in soup.select(".card-header"):
 
                 # ------------------------------------------
@@ -121,17 +121,64 @@ class Scraper:
                     continue
 
                 # ------------------------------------------
-                # 5. Avoid duplicates
+                # 5. Extract application URL
                 # ------------------------------------------
 
-                if name not in grants:
-                    grants.append(name)
+                grant_url = None
+
+                details_button = card.select_one(
+                    ".grant-details-toggle[aria-controls]"
+                )
+
+                if details_button:
+                    details_id = details_button.get("aria-controls")
+
+                    details = soup.select_one(
+                        f"#{details_id}"
+                    )
+
+                    if details:
+                        apply_link = details.select_one(
+                            "a.grant-apply-btn[href]"
+                    )
+
+                    if apply_link:
+                        grant_url = apply_link.get("href")
+
+                # Some grants may use a relative URL.
+                if grant_url and grant_url.startswith("/"):
+                    grant_url = f"https://www.firstinspires.org{grant_url}"
+
+                # ------------------------------------------
+                # 6. Avoid duplicate grants within one scrape
+                # ------------------------------------------
+
+                grant = {
+                    "title": name,
+                    "start_date": start_date,
+                    "end_date": end_date,
+                    "url": grant_url,
+                }
+
+                if not any(
+                    existing["title"] == name
+                    and existing["start_date"] == start_date
+                    and existing["end_date"] == end_date
+                    for existing in grants
+                ):
+                    grants.append(grant)
 
             print(f"📅 Today: {today.strftime('%Y-%m-%d')}")
             print(f"✅ Scraped {len(grants)} active FRC grants")
 
             for grant in grants:
-                print(f"   • {grant}")
+                print(
+                    f"   • {grant['title']} "
+                    f"({grant['start_date']} → {grant['end_date']})"
+                )
+
+                if grant["url"]:
+                    print(f"     🔗 {grant['url']}")
 
             return grants
 

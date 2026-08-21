@@ -7,6 +7,7 @@ from sqlalchemy import (
     Integer,
     BigInteger,
     String,
+    Date,
     DateTime,
     Boolean,
     ForeignKey,
@@ -47,16 +48,32 @@ class User(Base):
 class Grant(Base):
     """Grant model - stores detected grants"""
     __tablename__ = "grants"
-    
+
     id = Column(Integer, primary_key=True)
+
+    # Eski alanı migration tamamlanana kadar koruyoruz.
     text = Column(String(1000), unique=True, nullable=False)
-    detected_at = Column(DateTime, default=lambda: datetime.now(TURKEY_TZ), index=True)
-    
-    # Relationships
-    notifications = relationship("Notification", back_populates="grant", cascade="all, delete-orphan")
-    
+
+    # Yeni yapı
+    title = Column(String(1000), nullable=True)
+    start_date = Column(Date, nullable=True)
+    end_date = Column(Date, nullable=True)
+    url = Column(String(2000), nullable=True)
+
+    detected_at = Column(
+        DateTime,
+        default=lambda: datetime.now(TURKEY_TZ),
+        index=True
+    )
+
+    notifications = relationship(
+        "Notification",
+        back_populates="grant",
+        cascade="all, delete-orphan"
+    )
+
     def __repr__(self):
-        return f"<Grant id={self.id}>"
+        return f"<Grant id={self.id} title={self.title!r}>"
 
 
 class Notification(Base):
@@ -231,20 +248,44 @@ class DB:
     # ========== GRANT OPERATIONS ==========
     
     @staticmethod
-    def add_grant(text: str) -> int:
-        """Add grant to database and return its ID"""
+    def add_grant(
+        title: str,
+        start_date=None,
+        end_date=None,
+        url: str = None
+    ) -> int:
+        """Add a grant to database or update an existing grant."""
+
         session = SessionLocal()
+
         try:
-            existing = session.query(Grant).filter(Grant.text == text).first()
+            existing = session.query(Grant).filter(
+                Grant.text == title
+            ).first()
 
             if existing:
+                existing.title = title
+                existing.start_date = start_date
+                existing.end_date = end_date
+                existing.url = url
+
+                session.commit()
+
                 return existing.id
 
-            grant = Grant(text=text)
+            grant = Grant(
+                text=title,
+                title=title,
+                start_date=start_date,
+                end_date=end_date,
+                url=url
+            )
+
             session.add(grant)
             session.commit()
 
             return grant.id
+
         finally:
             session.close()
     
@@ -288,17 +329,17 @@ class DB:
                 return False
 
             existing = session.query(Notification).filter(
-            Notification.user_id == user.id,
-            Notification.grant_id == grant_id
+                Notification.user_id == user.id,
+                Notification.grant_id == grant_id
             ).first()
 
             if existing:
                 return False
 
             notification = Notification(
-            user_id=user.id,
-            grant_id=grant_id,
-            sent_at=None
+                user_id=user.id,
+                grant_id=grant_id,
+                sent_at=None
             )
 
             session.add(notification)
@@ -325,7 +366,10 @@ class DB:
                     Notification.id,
                     Notification.grant_id,
                     User.chat_id,
-                    Grant.text
+                    Grant.title,
+                    Grant.start_date,
+                    Grant.end_date,
+                    Grant.url
                 )
                 .join(User, Notification.user_id == User.id)
                 .join(Grant, Notification.grant_id == Grant.id)
@@ -342,9 +386,21 @@ class DB:
                     "notification_id": notification_id,
                     "grant_id": grant_id,
                     "chat_id": chat_id,
-                    "grant_text": grant_text,
+                    "grant_title": grant_title,
+                    "start_date": start_date,
+                    "end_date": end_date,
+                    "grant_url": grant_url,
                 }
-                for notification_id, grant_id, chat_id, grant_text in rows
+                
+                for (
+                    notification_id,
+                    grant_id,
+                    chat_id,
+                    grant_title,
+                    start_date,
+                    end_date,
+                    grant_url
+                ) in rows
             ]
 
         finally:

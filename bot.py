@@ -341,15 +341,16 @@ async def scrape_and_notify_loop(application):
 
                 if current_grants:
 
-                    known_grants = [
-                        grant.text
+                    known_grants = {
+                        grant.title
                         for grant in DB.get_all_grants()
-                    ]
+                        if grant.title
+                    }
 
                     new_grants = [
                         grant
                         for grant in current_grants
-                        if grant not in known_grants
+                        if grant["title"] not in known_grants
                     ]
 
                     # ==========================================
@@ -364,9 +365,14 @@ async def scrape_and_notify_loop(application):
 
                         subscribed_users = DB.get_subscribed_users()
 
-                        for grant_text in new_grants:
+                        for grant in new_grants:
 
-                            grant_id = DB.add_grant(grant_text)
+                            grant_id = DB.add_grant(
+                                title=grant["title"],
+                                start_date=grant["start_date"],
+                                end_date=grant["end_date"],
+                                url=grant["url"]
+                            )
 
                             for chat_id in subscribed_users:
 
@@ -419,26 +425,29 @@ async def scrape_and_notify_loop(application):
                                 "BİLDİRİMİ!* 🚨\n\n"
                             )
 
-                            for index, notification in enumerate(
-                                batch,
-                                1
-                            ):
+                            for index, notification in enumerate(batch, 1):
 
-                                grant_text = notification["grant_text"]
+                                grant_title = notification["grant_title"]
 
-                                if len(grant_text) > 80:
-                                    grant_text = (
-                                        grant_text[:80] + "..."
-                                    )
+                                if len(grant_title) > 80:
+                                    grant_title = grant_title[:80] + "..."
 
                                 message += (
-                                    f"{index}. *{grant_text}*\n"
+                                    f"{index}. *{grant_title}*\n"
                                 )
 
-                            message += (
-                                f"\n🔗 [Detaylı İncelemek İçin Tıklayın]"
-                                f"({config.GRANT_URL})"
-                            )
+                                if notification["grant_url"]:
+                                    message += (
+                                        f"   🔗 [Başvuru Linki]({notification['grant_url']})\n"
+                                    )
+
+                                if notification["start_date"] and notification["end_date"]:
+                                    message += (
+                                        f"   📅 {notification['start_date'].strftime('%d.%m.%Y')}"
+                                        f" → {notification['end_date'].strftime('%d.%m.%Y')}\n"
+                                    )
+
+                                message += "\n"
 
                             try:
 
