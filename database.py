@@ -342,6 +342,21 @@ class DB:
 
         finally:
             session.close()
+            
+    @staticmethod
+    def get_active_users() -> list:
+        """Get chat IDs of all active users."""
+        session = SessionLocal()
+
+        try:
+            users = session.query(User).filter(
+                User.is_active.is_(True)
+            ).all()
+
+            return [user.chat_id for user in users]
+
+        finally:
+            session.close()
               
     @staticmethod
     def get_user_stats(chat_id: int) -> dict:

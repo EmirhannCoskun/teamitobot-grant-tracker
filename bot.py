@@ -193,19 +193,19 @@ def format_duration(delta_seconds: float) -> str:
 
 
 async def status(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Handle /status command - Show personal bot status"""
+    """Handle /status command - Show bot status."""
 
     chat_id = update.effective_chat.id
 
-    user_stats = DB.get_user_stats(chat_id)
+    system_stats = DB.get_stats_dict()
+    is_subscribed = DB.is_subscribed(chat_id)
 
     message = (
         "🟢 *İtobot Durumu*\n\n"
-        f"🔍 *Sizin Tarama Sayınız:* `{user_stats['scrapes']}` kez\n"
-        f"🚨 *Aldığınız Hibe Bildirimi:* `{user_stats['notifications']}` adet\n"
+        f"👥 *Aktif Kullanıcı:* `{system_stats['users']}` kişi\n"
         f"🔔 *Abonelik Durumu:* "
-        f"{'✅ Aktif' if user_stats['subscribed'] else '❌ Pasif'}\n\n"
-        "🟢 *Sistem:* Stabil & Aktif"
+        f"{'✅ Aktif' if is_subscribed else '❌ Pasif'}\n"
+        "⚙️ *Sistem:* 🟢 Çalışıyor"
     )
 
     await update.message.reply_text(
@@ -247,10 +247,10 @@ async def stats(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     message = (
         "📊 *Kişisel İstatistikleriniz*\n\n"
-        f"🔍 *Yaptığınız Tarama:* `{user_stats['scrapes']}` kez\n"
-        f"📨 *Aldığınız Bildirim:* `{user_stats['notifications']}` adet\n"
-        f"🔔 *Abone Durumu:* "
-        f"{'✅ Aktif' if user_stats['subscribed'] else '❌ Pasif'}"
+        f"🔍 *Sizin İçin Yapılan Tarama:* "
+        f"`{user_stats['scrapes']}` kez\n"
+        f"📨 *Aldığınız Hibe Bildirimi:* "
+        f"`{user_stats['notifications']}` adet"
     )
 
     await update.message.reply_text(
@@ -268,7 +268,7 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "🔹 *❌ Abone Olmaktan Çık* - Bildirimler almayı durdur\n"
         "🔹 *⏱️ Sonraki Tarama* - Bir sonraki site kontrolüne kalan süreyi göster\n"
         "🔹 *📈 İstatistik* - Kişisel istatistiklerini göster\n"
-        "🔹 *🟢 Durum* - Kişisel bot durumunu göster\n"
+        "🔹 *🟢 Durum* - Botun genel çalışma durumunu göster\n"
         "🔹 *❓ Yardım* - Bu yardım menüsünü görüntüle\n\n"
         "💡 Herhangi bir sorunla karşılaşırsan lütfen bot yöneticisine bildir."
     )
@@ -334,8 +334,10 @@ async def scrape_and_notify_loop(application):
                 # Global sistem istatistiği
                 DB.increment_scrapes()
 
-                # Her aktif kullanıcının kişisel tarama sayısı
-                DB.increment_user_scrapes()
+                active_users = DB.get_active_users()
+                
+                for chat_id in active_users:
+                    DB.increment_user_scrape(chat_id)
 
                 if current_grants:
 
