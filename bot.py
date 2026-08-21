@@ -239,18 +239,41 @@ async def next_check(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 async def stats(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Handle personal statistics"""
+    """Handle personal statistics."""
 
     chat_id = update.effective_chat.id
 
     user_stats = DB.get_user_stats(chat_id)
+    system_stats = DB.get_stats_dict()
+
+    # Bot çalışma süresini hesapla
+    uptime_text = "Bilinmiyor"
+
+    if system_stats["started"]:
+        uptime_seconds = (
+            datetime.now(TURKEY_TZ) - system_stats["started"]
+        ).total_seconds()
+
+        uptime_text = format_duration(uptime_seconds)
+
+    # Son tarama zamanını formatla
+    last_scrape_text = "Henüz tarama yapılmadı"
+
+    if system_stats["last_scrape"]:
+        last_scrape_text = system_stats["last_scrape"].strftime(
+            "%d.%m.%Y %H:%M:%S"
+        )
 
     message = (
-        "📊 *Kişisel İstatistikleriniz*\n\n"
-        f"🔍 *Sizin İçin Yapılan Tarama:* "
+        "📊 *İstatistikler*\n\n"
+        "👤 *Kişisel İstatistikleriniz*\n"
+        f"🔍 Sizin İçin Yapılan Tarama: "
         f"`{user_stats['scrapes']}` kez\n"
-        f"📨 *Aldığınız Hibe Bildirimi:* "
-        f"`{user_stats['notifications']}` adet"
+        f"📨 Aldığınız Hibe Bildirimi: "
+        f"`{user_stats['notifications']}` adet\n\n"
+        "🤖 *Bot İstatistikleri*\n"
+        f"🕐 Son Tarama: `{last_scrape_text}`\n"
+        f"⏱️ Çalışma Süresi: `{uptime_text}`"
     )
 
     await update.message.reply_text(
