@@ -5,9 +5,9 @@
 ![Python](https://img.shields.io/badge/Python-3.12+-blue)
 ![Status](https://img.shields.io/badge/Status-Active-brightgreen)
 
-**FIRST Robotics hibe fırsatlarını otomatik takip eden Telegram botu**
+**FIRST Robotics hibe fırsatlarını otomatik olarak takip eden Telegram botu**
 
-[Hızlı Başlangıç](#-hızlı-başlangıç) • [Kurulum](#-kurulum) • [Bot Komutları](#-bot-komutları) • [Özellikler](#-özellikler)
+[Hızlı Başlangıç](#-hızlı-başlangıç) • [Özellikler](#-özellikler) • [Çalışma Mantığı](#-çalışma-mantığı) • [Kurulum](#-kurulum) • [Bot Komutları](#-bot-komutları)
 
 </div>
 
@@ -15,7 +15,7 @@
 
 ## 📋 Nedir?
 
-İtobot Grant Tracker, FIRST Inspires web sitesinde yayınlanan **FRC hibe fırsatlarını otomatik olarak takip** eden ve yeni fırsatlar yayınlandığında Telegram üzerinden **bildirim gönderen** bir bot uygulamasıdır.
+**İtobot Grant Tracker**, FIRST Inspires web sitesinde yayınlanan **FRC hibe fırsatlarını otomatik olarak takip eden** ve yeni fırsatlar yayınlandığında Telegram üzerinden **bildirim gönderen** bir bot uygulamasıdır.
 
 Bot, FIRST'in hibe fırsatları sayfasını **15 dakikada bir** kontrol eder. Yeni bir FRC hibesi tespit edildiğinde hibenin:
 
@@ -26,28 +26,94 @@ Bot, FIRST'in hibe fırsatları sayfasını **15 dakikada bir** kontrol eder. Ye
 
 veritabanına kaydeder ve abone olan kullanıcılara bildirir.
 
-Kullanıcıların kod üzerinde herhangi bir değişiklik yapmasına gerek yoktur. Telegram'da botu açıp `/start` komutunu kullanmaları yeterlidir.
+Kullanıcıların herhangi bir kod değişikliği yapmasına gerek yoktur. Telegram'da botu açıp `/start` komutunu kullanmaları yeterlidir.
 
-### ✨ Özellikler
+---
+
+## ✨ Özellikler
 
 * 🔍 **Otomatik Tarama** - FIRST hibe portalını 15 dakikada bir kontrol eder
 * 🚨 **Otomatik Bildirim** - Yeni FRC hibeleri bulunduğunda abone kullanıcılara Telegram bildirimi gönderir
-* 🔗 **Doğrudan Başvuru Linki** - Bildirimlerde ilgili hibenin doğrudan başvuru bağlantısı bulunur
+* 🔗 **Doğrudan Başvuru Linki** - Bildirimlerde ilgili hibenin başvuru bağlantısı bulunur
 * 📅 **Hibe Tarihleri** - Başlangıç ve bitiş tarihleri bildirimlerde gösterilir
 * 👥 **Çok Kullanıcı Desteği** - Birden fazla kullanıcı aynı botu kullanabilir
-* 📊 **Kişisel İstatistikler** - Her kullanıcı kendi tarama ve aldığı bildirim sayılarını görebilir
+* 📊 **Kişisel İstatistikler** - Kullanıcılar aldıkları hibe bildirimlerini görüntüleyebilir
 * 🟢 **Bot Durumu** - Aktif kullanıcı sayısı, abonelik durumu ve sistem durumu görüntülenebilir
 * ⏱️ **Sonraki Tarama** - Bir sonraki otomatik taramaya kalan süre görüntülenebilir
 * 📈 **Son Tarama ve Çalışma Süresi** - Botun son tarama zamanı ve mevcut çalışma süresi görüntülenebilir
 * 🔔 **Abonelik Yönetimi** - Bildirimler istenildiğinde açılıp kapatılabilir
 * 🛡️ **Tekrarlı Bildirim Önleme** - Aynı hibe aynı kullanıcıya tekrar tekrar gönderilmez
 * ☁️ **Production Ready** - Render ve PostgreSQL üzerinde çalışacak şekilde yapılandırılmıştır
+* ❤️ **Graceful Shutdown** - Bot kapatılırken devam eden görevler kontrollü şekilde sonlandırılır
+
+---
+
+## ⚙️ Çalışma Mantığı
+
+İtobot sürekli olarak aşağıdaki akışla çalışır:
+
+```text
+              FIRST Inspires
+                    │
+                    ▼
+              ┌───────────┐
+              │  Scraper  │
+              └─────┬─────┘
+                    │
+             Hibe bilgileri
+                    │
+                    ▼
+           ┌─────────────────┐
+           │ Yeni hibe kontrol│
+           └────────┬────────┘
+                    │
+              Yeni hibe?
+             ┌──────┴──────┐
+             │             │
+            Hayır          Evet
+             │             │
+             │             ▼
+             │      PostgreSQL'e kaydet
+             │             │
+             │             ▼
+             │      Abone kullanıcıları bul
+             │             │
+             │             ▼
+             │      Pending bildirim oluştur
+             │             │
+             │             ▼
+             │       Telegram bildirimi
+             │             │
+             │             ▼
+             │       Gönderildi olarak işaretle
+             │
+             └──────────────►
+                    │
+                    ▼
+              15 dakika bekle
+                    │
+                    └──────► Tekrar tara
+```
+
+### Hibe tespit sistemi
+
+Bir hibenin daha önce görülüp görülmediği kontrol edilirken hibenin:
+
+* **Başlığı**
+* **Başlangıç tarihi**
+* **Bitiş tarihi**
+
+birlikte değerlendirilir.
+
+Bu sayede yalnızca başlığa bakılarak farklı tarih aralığına sahip hibelerin yanlış şekilde aynı hibe kabul edilmesi önlenir.
+
+Ayrıca aynı kullanıcı için aynı hibe hakkında birden fazla bildirim oluşturulması veritabanı seviyesinde de engellenir.
 
 ---
 
 ## ⚡ Hızlı Başlangıç
 
-### 30 saniyede başla:
+### 30 saniyede başla
 
 ```text
 1. Telegram'da arama kısmına @itobot_grant_tracker_bot yaz
@@ -56,20 +122,20 @@ Kullanıcıların kod üzerinde herhangi bir değişiklik yapmasına gerek yoktu
 4. Tamamlandı! ✅
 ```
 
-Bundan sonra yeni FRC hibe fırsatları bulunduğunda bildirim alırsınız.
+Bundan sonra yeni FRC hibe fırsatları bulunduğunda Telegram üzerinden bildirim alırsınız.
 
 ---
 
 ## 🤖 Bot Komutları
 
-Bot içerisinde tüm temel işlemler butonlar üzerinden yapılır.
+Bot içerisindeki temel işlemler butonlar üzerinden yapılır.
 
 | Buton                    | Açıklama                                                          |
 | ------------------------ | ----------------------------------------------------------------- |
 | 📨 **Abone Ol**          | Yeni hibe bildirimlerini almaya başla                             |
 | ❌ **Abone Olmaktan Çık** | Hibe bildirimlerini durdur                                        |
 | ⏱️ **Sonraki Tarama**    | Bir sonraki otomatik taramaya kalan süreyi göster                 |
-| 📈 **İstatistik**        | Kişisel tarama ve bildirim istatistiklerini göster                |
+| 📈 **İstatistik**        | Kişisel bildirim ve bot istatistiklerini göster                   |
 | 🟢 **Durum**             | Aktif kullanıcı sayısı, abonelik durumu ve sistem durumunu göster |
 | ❓ **Yardım**             | Botun kullanım bilgilerini göster                                 |
 
@@ -79,14 +145,15 @@ Bot içerisinde tüm temel işlemler butonlar üzerinden yapılır.
 
 Bot iki farklı istatistik görünümü sunar.
 
-### 📈 Kişisel İstatistikler
+### 📈 İstatistik
 
-Her kullanıcı yalnızca **kendi verilerini** görür:
+Kullanıcılar:
 
-* 🔍 Kendisi için gerçekleştirilen tarama sayısı
-* 📨 Aldığı hibe bildirimlerinin sayısı
-* 🕐 Botun son tarama zamanı
-* ⏱️ Botun mevcut çalışma süresi
+* 📨 Aldıkları hibe bildirimlerinin sayısını
+* 🕐 Botun son başarılı tarama zamanını
+* ⏱️ Botun mevcut çalışma süresini
+
+görebilir.
 
 ### 🟢 Bot Durumu
 
@@ -94,7 +161,12 @@ Genel sistem durumu:
 
 * 👥 Aktif kullanıcı sayısı
 * 🔔 Kullanıcının abonelik durumu
+* 🔍 Toplam başarılı tarama sayısı
 * ⚙️ Sistem çalışma durumu
+
+görüntülenebilir.
+
+Başarısız scraper çalışmaları toplam başarılı tarama sayısına dahil edilmez.
 
 ---
 
@@ -133,11 +205,11 @@ frc-grant-tracker/
 * ✅ Local database dosyaları `.gitignore` ile hariç tutulur
 * ✅ SQLAlchemy ORM kullanılır
 * ✅ PostgreSQL production ortamında kullanılır
-* ✅ Environment değişkenleri üzerinden production configuration yönetilir
+* ✅ Production configuration environment değişkenleri üzerinden yönetilir
 
 ### ❌ Asla
 
-Bot token'ını, database şifresini veya diğer secret bilgileri GitHub'a commit etmeyin.
+Bot token'ını, database şifresini veya diğer secret bilgileri GitHub repository'sine commit etmeyin.
 
 ---
 
@@ -157,32 +229,53 @@ Bot token'ını, database şifresini veya diğer secret bilgileri GitHub'a commi
 
 ## ☁️ Production
 
-İtobot production ortamında:
+İtobot production ortamında Render üzerinde sürekli çalışacak şekilde yapılandırılmıştır.
 
 ```text
-FIRST Inspires
-      ↓
-   Scraper
-      ↓
- PostgreSQL
-      ↓
- Telegram Bot
-      ↓
- Abone Kullanıcılar
+┌─────────────────────┐
+│   FIRST Inspires    │
+└──────────┬──────────┘
+           │
+           ▼
+┌─────────────────────┐
+│      Scraper        │
+│       Render        │
+└──────────┬──────────┘
+           │
+           ▼
+┌─────────────────────┐
+│     PostgreSQL      │
+└──────────┬──────────┘
+           │
+           ▼
+┌─────────────────────┐
+│   Telegram Bot      │
+│       Render        │
+└──────────┬──────────┘
+           │
+           ▼
+    Abone Kullanıcılar
 ```
 
-mimarisiyle çalışır.
+Bot ayrıca Render health-check sistemi tarafından kontrol edilebilen bir HTTP health endpoint'i çalıştırır.
 
-Bot, Render üzerinde sürekli çalışacak şekilde yapılandırılmıştır ve health-check endpoint'i üzerinden izlenebilir.
+### Production davranışı
+
+* 🔍 Hibe sayfası **15 dakikada bir** kontrol edilir
+* 🟢 Başarılı taramalar istatistiklere eklenir
+* ⚠️ Başarısız taramalar başarılı tarama sayısına eklenmez
+* 🚨 Yeni hibeler abone kullanıcılara bildirilir
+* 🔁 Başarısız Telegram gönderimleri daha sonra tekrar denenebilir
+* 🛑 Render tarafından gönderilen SIGTERM sinyali kontrollü şekilde işlenir
 
 ---
 
-## 📧 Destek
+## 📧 İletişim
 
-Sorunlar, öneriler veya geliştirme fikirleri için:
+Sorular, öneriler veya geliştirme fikirleri için:
 
-**GitHub Issues:**
-https://github.com/EmirhannCoskun/frc-grant-tracker/issues
+**E-posta:**
+[iletisimemirhancoskun@gmail.com](mailto:iletisimemirhancoskun@gmail.com)
 
 ---
 
@@ -197,7 +290,7 @@ https://github.com/EmirhannCoskun/frc-grant-tracker/issues
 
 <div align="center">
 
-Made with by Team İTOBOT
+**Made with ❤️ by Team İTOBOT**
 
 **⭐ Bu projeyi beğendiysen yıldız atabilirsin!**
 
