@@ -60,7 +60,7 @@ class Grant(Base):
     id = Column(Integer, primary_key=True)
 
     # Eski alanı migration tamamlanana kadar koruyoruz.
-    text = Column(String(1000), unique=True, nullable=False)
+    text = Column(String(1000), nullable=True)
 
     # Yeni yapı
     title = Column(String(1000), nullable=True)
