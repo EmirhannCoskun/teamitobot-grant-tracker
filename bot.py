@@ -393,7 +393,12 @@ async def scrape_and_notify_loop(application):
                 if current_grants:
 
                     known_grants = {
-                        grant.title
+                        (
+                            grant.title,
+                            grant.start_date,
+                            grant.end_date
+                        )
+                        
                         for grant in DB.get_all_grants()
                         if grant.title
                     }
@@ -401,7 +406,11 @@ async def scrape_and_notify_loop(application):
                     new_grants = [
                         grant
                         for grant in current_grants
-                        if grant["title"] not in known_grants
+                        if (
+                            grant["title"],
+                            grant["start_date"],
+                            grant["end_date"]
+                        ) not in known_grants
                     ]
 
                     # ==========================================
