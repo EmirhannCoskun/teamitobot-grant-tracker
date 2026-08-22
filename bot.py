@@ -381,10 +381,14 @@ async def scrape_and_notify_loop(application):
                 current_grants = Scraper.scrape()
 
                 if current_grants is None:
-                    print("⚠️ Scrape başarısız oldu. Bu tarama istatistiklere eklenmeyecek.")
+                    print("⚠ Scrape başarısız oldu. Bu tarama istatistiklere eklenmeyecek.")
                 else:
                     # Sadece başarıyla tamamlanan taramayı say
                     DB.increment_scrapes()
+
+                # Tarama başarılı veya başarısız olsun,
+                # bir sonraki tarama için süreyi yeniden başlat.
+                last_scrape_time = current_time
 
                 if current_grants:
 
@@ -532,8 +536,6 @@ async def scrape_and_notify_loop(application):
                 # ==========================================
 
                 DB.update_user_count()
-
-                last_scrape_time = current_time
 
             await asyncio.sleep(2)
 
