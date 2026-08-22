@@ -269,13 +269,12 @@ class DB:
 
         try:
             existing = session.query(Grant).filter(
-                Grant.text == title
+                Grant.title == title,
+                Grant.start_date == start_date,
+                Grant.end_date == end_date
             ).first()
 
             if existing:
-                existing.title = title
-                existing.start_date = start_date
-                existing.end_date = end_date
                 existing.url = url
 
                 session.commit()
