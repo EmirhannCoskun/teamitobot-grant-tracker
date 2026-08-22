@@ -607,6 +607,7 @@ async def main():
     # ==========================================
 
     DB.get_or_create_stats()
+    DB.reset_started_at()
 
     print("✅ Bot initialized successfully!")
 

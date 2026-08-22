@@ -519,6 +519,21 @@ class DB:
             return stats
         finally:
             session.close()
+            
+    @staticmethod
+    def reset_started_at():
+        """Reset bot start time for the current process."""
+        session = SessionLocal()
+
+        try:
+            stats = session.query(Stats).first()
+
+            if stats:
+                stats.started_at = datetime.now(TURKEY_TZ)
+                session.commit()
+
+        finally:
+            session.close()
     
     @staticmethod
     def increment_scrapes():
