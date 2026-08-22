@@ -25,7 +25,7 @@ class Scraper:
     }
 
     @staticmethod
-    def scrape() -> list:
+    def scrape() -> list | None:
         """Scrape currently active FRC grants from FIRST website."""
 
         try:
@@ -184,12 +184,12 @@ class Scraper:
 
         except requests.exceptions.Timeout:
             print("❌ Scraper timeout")
-            return []
+            return None
 
         except requests.exceptions.RequestException as e:
             print(f"❌ Request error: {e}")
-            return []
+            return None
 
         except Exception as e:
             print(f"❌ Scraper error: {e}")
-            return []
+            return None

@@ -217,6 +217,7 @@ async def status(update: Update, context: ContextTypes.DEFAULT_TYPE):
     message = (
         "🟢 *İtobot Durumu*\n\n"
         f"👥 *Aktif Kullanıcı:* `{system_stats['users']}` kişi\n"
+        f"🔍 *Toplam Başarılı Tarama:* `{system_stats['scrapes']}` kez\n"
         f"🔔 *Abonelik Durumu:* "
         f"{'✅ Aktif' if is_subscribed else '❌ Pasif'}\n"
         "⚙️ *Sistem:* 🟢 Çalışıyor"
@@ -294,8 +295,6 @@ async def stats(update: Update, context: ContextTypes.DEFAULT_TYPE):
     message = (
         "📊 *İstatistikler*\n\n"
         "👤 *Kişisel İstatistikleriniz*\n"
-        f"🔍 Sizin İçin Yapılan Tarama: "
-        f"`{user_stats['scrapes']}` kez\n"
         f"📨 Aldığınız Hibe Bildirimi: "
         f"`{user_stats['notifications']}` adet\n\n"
         "🤖 *Bot İstatistikleri*\n"
@@ -381,13 +380,11 @@ async def scrape_and_notify_loop(application):
 
                 current_grants = Scraper.scrape()
 
-                # Global sistem istatistiği
-                DB.increment_scrapes()
-
-                active_users = DB.get_active_users()
-                
-                for chat_id in active_users:
-                    DB.increment_user_scrape(chat_id)
+                if current_grants is None:
+                    print("⚠️ Scrape başarısız oldu. Bu tarama istatistiklere eklenmeyecek.")
+                else:
+                    # Sadece başarıyla tamamlanan taramayı say
+                    DB.increment_scrapes()
 
                 if current_grants:
 
