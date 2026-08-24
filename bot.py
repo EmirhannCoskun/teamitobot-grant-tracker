@@ -241,10 +241,18 @@ async def next_check(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     mins, secs = divmod(int(remaining), 60)
 
+    interval_minutes = config.CHECK_INTERVAL // 60
+
+    if interval_minutes >= 1:
+        interval_text = f"{interval_minutes} dakika"
+    else:
+        interval_text = f"{config.CHECK_INTERVAL} saniye"
+
     message = (
         "⏳ *Bir Sonraki Otomatik Tarama*\n\n"
         f"⏱️ *Kalan Süre:* `{mins:02d} dk {secs:02d} sn`\n\n"
-        "💡 *Bilgi:* Site 15 dakikada bir taranıp yeni hibe var mı kontrol ediliyor."
+        f"💡 *Bilgi:* Site {interval_text}da bir "
+        "taranıp yeni hibe var mı kontrol ediliyor."
     )
 
     await update.message.reply_text(
@@ -381,7 +389,10 @@ async def scrape_and_notify_loop(application):
                 current_grants = Scraper.scrape()
 
                 if current_grants is None:
-                    print("⚠ Scrape başarısız oldu. Bu tarama istatistiklere eklenmeyecek.")
+                    print(
+                        "⚠ Scrape başarısız oldu. "
+                        "Bu tarama istatistiklere eklenmeyecek."
+                    )
                 else:
                     # Sadece başarıyla tamamlanan taramayı say
                     DB.increment_scrapes()
@@ -398,7 +409,6 @@ async def scrape_and_notify_loop(application):
                             grant.start_date,
                             grant.end_date
                         )
-                        
                         for grant in DB.get_all_grants()
                         if grant.title
                     }
@@ -496,7 +506,8 @@ async def scrape_and_notify_loop(application):
 
                                 if notification["grant_url"]:
                                     message += (
-                                        f"   🔗 [Başvuru Linki]({notification['grant_url']})\n"
+                                        f"   🔗 [Başvuru Linki]"
+                                        f"({notification['grant_url']})\n"
                                     )
 
                                 if (
