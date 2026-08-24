@@ -3,6 +3,7 @@
 <div align="center">
 
 ![Python](https://img.shields.io/badge/Python-3.12+-blue)
+
 ![Status](https://img.shields.io/badge/Status-Active-brightgreen)
 
 **FIRST Robotics hibe fırsatlarını otomatik olarak takip eden Telegram botu**
@@ -24,7 +25,7 @@ Bot, FIRST'in hibe fırsatları sayfasını **15 dakikada bir** kontrol eder. Ye
 * Bitiş tarihini
 * Doğrudan başvuru bağlantısını
 
-veritabanına kaydeder ve abone olan kullanıcılara bildirir.
+PostgreSQL veritabanına kaydeder ve abone olan kullanıcılara bildirir.
 
 Kullanıcıların herhangi bir kod değişikliği yapmasına gerek yoktur. Telegram'da botu açıp `/start` komutunu kullanmaları yeterlidir.
 
@@ -53,46 +54,46 @@ Kullanıcıların herhangi bir kod değişikliği yapmasına gerek yoktur. Teleg
 İtobot sürekli olarak aşağıdaki akışla çalışır:
 
 ```text
-              FIRST Inspires
-                    │
-                    ▼
-              ┌───────────┐
-              │  Scraper  │
-              └─────┬─────┘
-                    │
-             Hibe bilgileri
-                    │
-                    ▼
-           ┌─────────────────┐
-           │ Yeni hibe kontrol│
-           └────────┬────────┘
-                    │
-              Yeni hibe?
-             ┌──────┴──────┐
-             │             │
-            Hayır          Evet
-             │             │
-             │             ▼
-             │      PostgreSQL'e kaydet
-             │             │
-             │             ▼
-             │      Abone kullanıcıları bul
-             │             │
-             │             ▼
-             │      Pending bildirim oluştur
-             │             │
-             │             ▼
-             │       Telegram bildirimi
-             │             │
-             │             ▼
-             │       Gönderildi olarak işaretle
-             │
-             └──────────────►
-                    │
-                    ▼
-              15 dakika bekle
-                    │
-                    └──────► Tekrar tara
+                    FIRST Inspires
+                          │
+                          ▼
+                   ┌───────────┐
+                   │  Scraper  │
+                   └─────┬─────┘
+                         │
+                  Hibe bilgileri
+                         │
+                         ▼
+                ┌─────────────────┐
+                │ Yeni hibe kontrol│
+                └────────┬────────┘
+                         │
+                    Yeni hibe?
+                   ┌─────┴─────┐
+                   │           │
+                 Hayır         Evet
+                   │           │
+                   │           ▼
+                   │    PostgreSQL'e kaydet
+                   │           │
+                   │           ▼
+                   │    Abone kullanıcıları bul
+                   │           │
+                   │           ▼
+                   │    Pending bildirim oluştur
+                   │           │
+                   │           ▼
+                   │     Telegram bildirimi
+                   │           │
+                   │           ▼
+                   │     Gönderildi olarak işaretle
+                   │
+                   └──────────────►
+                          │
+                          ▼
+                    15 dakika bekle
+                          │
+                          └──────► Tekrar tara
 ```
 
 ### Hibe tespit sistemi
@@ -117,8 +118,11 @@ Ayrıca aynı kullanıcı için aynı hibe hakkında birden fazla bildirim oluş
 
 ```text
 1. Telegram'da arama kısmına @itobot_grant_tracker_bot yaz
+
 2. /start komutunu gönder
+
 3. "📨 Abone Ol" butonuna bas
+
 4. Tamamlandı! ✅
 ```
 
@@ -174,13 +178,14 @@ Başarısız scraper çalışmaları toplam başarılı tarama sayısına dahil 
 
 ```text
 frc-grant-tracker/
+
 │
 ├── 📄 bot.py                 ← Ana Telegram botu
-├── 📄 database.py            ← Veritabanı modelleri ve işlemleri
+├── 📄 database.py            ← PostgreSQL modelleri ve işlemleri
 ├── 📄 scraper.py             ← FIRST hibe scraper'ı
 ├── 📄 config.py              ← Konfigürasyon yönetimi
 │
-├── 📄 .env                   ← Environment değişkenleri (local)
+├── 📄 .env                   ← Environment değişkenleri
 ├── 📄 .gitignore             ← Git ignore kuralları
 ├── 📄 requirements.txt       ← Python bağımlılıkları
 ├── 📄 Procfile               ← Render deployment
@@ -190,22 +195,20 @@ frc-grant-tracker/
 │   ├── QUICK_START.md        ← Hızlı başlangıç
 │   ├── SETUP-GUIDE.md        ← Detaylı kurulum
 │   └── SECURITY.md           ← Güvenlik bilgileri
-│
-└── 📦 grant_tracker.db       ← Local development database
 ```
 
-> `grant_tracker.db` yalnızca local development için kullanılır. Production ortamında PostgreSQL kullanılır.
+Production ortamında tüm kalıcı veriler **PostgreSQL** üzerinde tutulur.
 
 ---
 
 ## 🔐 Güvenlik
 
-* ✅ Telegram bot token'ı `.env` üzerinden okunur
+* ✅ Telegram bot token'ı environment değişkeni üzerinden okunur
 * ✅ Secret değerler GitHub repository'sine commit edilmez
-* ✅ Local database dosyaları `.gitignore` ile hariç tutulur
+* ✅ Environment değişkenleri production configuration için kullanılır
 * ✅ SQLAlchemy ORM kullanılır
-* ✅ PostgreSQL production ortamında kullanılır
-* ✅ Production configuration environment değişkenleri üzerinden yönetilir
+* ✅ PostgreSQL production veritabanı olarak kullanılır
+* ✅ Veritabanı kimlik bilgileri kaynak kodundan ayrı tutulur
 
 ### ❌ Asla
 
@@ -220,8 +223,7 @@ Bot token'ını, database şifresini veya diğer secret bilgileri GitHub reposit
 * **BeautifulSoup4** - Web scraping
 * **Requests** - HTTP istekleri
 * **SQLAlchemy** - ORM
-* **SQLite** - Local development database
-* **PostgreSQL** - Production database
+* **PostgreSQL** - Veritabanı
 * **Render** - Hosting ve deployment
 * **UptimeRobot** - Monitoring
 
@@ -238,23 +240,24 @@ Bot token'ını, database şifresini veya diğer secret bilgileri GitHub reposit
            │
            ▼
 ┌─────────────────────┐
-│      Scraper        │
+│       Scraper       │
 │       Render        │
 └──────────┬──────────┘
            │
            ▼
 ┌─────────────────────┐
 │     PostgreSQL      │
-└──────────┬──────────┘
-           │
-           ▼
-┌─────────────────────┐
-│   Telegram Bot      │
 │       Render        │
 └──────────┬──────────┘
            │
            ▼
-    Abone Kullanıcılar
+┌─────────────────────┐
+│    Telegram Bot     │
+│       Render        │
+└──────────┬──────────┘
+           │
+           ▼
+     Abone Kullanıcılar
 ```
 
 Bot ayrıca Render health-check sistemi tarafından kontrol edilebilen bir HTTP health endpoint'i çalıştırır.
@@ -275,6 +278,7 @@ Bot ayrıca Render health-check sistemi tarafından kontrol edilebilen bir HTTP 
 Sorular, öneriler veya geliştirme fikirleri için:
 
 **E-posta:**
+
 [iletisimemirhancoskun@gmail.com](mailto:iletisimemirhancoskun@gmail.com)
 
 ---
@@ -295,3 +299,4 @@ Sorular, öneriler veya geliştirme fikirleri için:
 **⭐ Bu projeyi beğendiysen yıldız atabilirsin!**
 
 </div>
+```
