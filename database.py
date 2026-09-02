@@ -12,7 +12,7 @@ from sqlalchemy import (
     DateTime,
     Boolean,
     ForeignKey,
-    UniqueConstraint
+    UniqueConstraint,
 )
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.exc import IntegrityError
@@ -22,7 +22,6 @@ import pytz
 
 from config import config
 
-
 TURKEY_TZ = pytz.timezone("Europe/Istanbul")
 Base = declarative_base()
 
@@ -30,6 +29,7 @@ Base = declarative_base()
 # ==========================================
 # DATABASE MODELS
 # ==========================================
+
 
 class User(Base):
     """User model - stores Telegram users"""
@@ -43,15 +43,10 @@ class User(Base):
     is_subscribed = Column(Boolean, default=False)
     total_scrapes = Column(Integer, default=0, nullable=False)
 
-    created_at = Column(
-        DateTime,
-        default=lambda: datetime.now(TURKEY_TZ)
-    )
+    created_at = Column(DateTime, default=lambda: datetime.now(TURKEY_TZ))
 
     notifications = relationship(
-        "Notification",
-        back_populates="user",
-        cascade="all, delete-orphan"
+        "Notification", back_populates="user", cascade="all, delete-orphan"
     )
 
     def __repr__(self):
@@ -74,16 +69,10 @@ class Grant(Base):
     end_date = Column(Date, nullable=True)
     url = Column(String(2000), nullable=True)
 
-    detected_at = Column(
-        DateTime,
-        default=lambda: datetime.now(TURKEY_TZ),
-        index=True
-    )
+    detected_at = Column(DateTime, default=lambda: datetime.now(TURKEY_TZ), index=True)
 
     notifications = relationship(
-        "Notification",
-        back_populates="grant",
-        cascade="all, delete-orphan"
+        "Notification", back_populates="grant", cascade="all, delete-orphan"
     )
 
     def __repr__(self):
@@ -99,11 +88,7 @@ class Notification(Base):
     sent_at = Column(DateTime, nullable=True)
 
     __table_args__ = (
-        UniqueConstraint(
-            "user_id",
-            "grant_id",
-            name="uq_notification_user_grant"
-        ),
+        UniqueConstraint("user_id", "grant_id", name="uq_notification_user_grant"),
     )
 
     user = relationship("User", back_populates="notifications")
@@ -119,10 +104,7 @@ class Stats(Base):
     total_scrapes = Column(Integer, default=0)
     total_notifications = Column(Integer, default=0)
     total_users = Column(Integer, default=0)
-    started_at = Column(
-        DateTime,
-        default=lambda: datetime.now(TURKEY_TZ)
-    )
+    started_at = Column(DateTime, default=lambda: datetime.now(TURKEY_TZ))
     last_scrape_at = Column(DateTime, nullable=True)
 
 
@@ -132,16 +114,12 @@ class Stats(Base):
 
 engine = create_engine(
     config.DATABASE_URL,
-    connect_args={
-        "check_same_thread": False
-    } if "sqlite" in config.DATABASE_URL else {}
+    connect_args=(
+        {"check_same_thread": False} if "sqlite" in config.DATABASE_URL else {}
+    ),
 )
 
-SessionLocal = sessionmaker(
-    autocommit=False,
-    autoflush=False,
-    bind=engine
-)
+SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
 
 def init_db():
@@ -168,6 +146,7 @@ def get_db():
 # DATABASE OPERATIONS
 # ==========================================
 
+
 class DB:
     """Database operations - static methods"""
 
@@ -176,26 +155,18 @@ class DB:
     # ==========================================
 
     @staticmethod
-    def add_or_get_user(
-        chat_id: int,
-        username: str = None
-    ) -> User:
+    def add_or_get_user(chat_id: int, username: str = None) -> User:
         """Add new user or get existing"""
 
         session = SessionLocal()
 
         try:
-            user = session.query(User).filter(
-                User.chat_id == chat_id
-            ).first()
+            user = session.query(User).filter(User.chat_id == chat_id).first()
 
             if user:
                 return user
 
-            user = User(
-                chat_id=chat_id,
-                username=username
-            )
+            user = User(chat_id=chat_id, username=username)
 
             session.add(user)
             session.commit()
@@ -214,9 +185,7 @@ class DB:
         session = SessionLocal()
 
         try:
-            return session.query(User).filter(
-                User.chat_id == chat_id
-            ).first()
+            return session.query(User).filter(User.chat_id == chat_id).first()
 
         finally:
             session.close()
@@ -228,9 +197,7 @@ class DB:
         session = SessionLocal()
 
         try:
-            user = session.query(User).filter(
-                User.chat_id == chat_id
-            ).first()
+            user = session.query(User).filter(User.chat_id == chat_id).first()
 
             if not user:
                 return "not_found"
@@ -253,9 +220,7 @@ class DB:
         session = SessionLocal()
 
         try:
-            user = session.query(User).filter(
-                User.chat_id == chat_id
-            ).first()
+            user = session.query(User).filter(User.chat_id == chat_id).first()
 
             if not user:
                 return "not_found"
@@ -264,11 +229,8 @@ class DB:
                 return "already_unsubscribed"
 
             session.query(Notification).filter(
-                Notification.user_id == user.id,
-                Notification.sent_at.is_(None)
-            ).delete(
-                synchronize_session=False
-            )
+                Notification.user_id == user.id, Notification.sent_at.is_(None)
+            ).delete(synchronize_session=False)
 
             user.is_subscribed = False
             session.commit()
@@ -285,15 +247,13 @@ class DB:
         session = SessionLocal()
 
         try:
-            users = session.query(User).filter(
-                User.is_subscribed.is_(True),
-                User.is_active.is_(True)
-            ).all()
+            users = (
+                session.query(User)
+                .filter(User.is_subscribed.is_(True), User.is_active.is_(True))
+                .all()
+            )
 
-            return [
-                user.chat_id
-                for user in users
-            ]
+            return [user.chat_id for user in users]
 
         finally:
             session.close()
@@ -305,9 +265,7 @@ class DB:
         session = SessionLocal()
 
         try:
-            user = session.query(User).filter(
-                User.chat_id == chat_id
-            ).first()
+            user = session.query(User).filter(User.chat_id == chat_id).first()
 
             return user.is_subscribed if user else False
 
@@ -319,21 +277,17 @@ class DB:
     # ==========================================
 
     @staticmethod
-    def add_grant(
-        title: str,
-        start_date=None,
-        end_date=None,
-        url: str = None
-    ) -> int:
+    def add_grant(title: str, start_date=None, end_date=None, url: str = None) -> int:
         """Add a grant to database or update an existing grant."""
 
         session = SessionLocal()
 
         try:
-            existing = session.query(Grant).filter(
-                (Grant.title == title) |
-                (Grant.text == title)
-            ).first()
+            existing = (
+                session.query(Grant)
+                .filter((Grant.title == title) | (Grant.text == title))
+                .first()
+            )
 
             if existing:
                 existing.text = title
@@ -351,7 +305,7 @@ class DB:
                 title=title,
                 start_date=start_date,
                 end_date=end_date,
-                url=url
+                url=url,
             )
 
             session.add(grant)
@@ -363,10 +317,11 @@ class DB:
 
             session.rollback()
 
-            existing = session.query(Grant).filter(
-                (Grant.title == title) |
-                (Grant.text == title)
-            ).first()
+            existing = (
+                session.query(Grant)
+                .filter((Grant.title == title) | (Grant.text == title))
+                .first()
+            )
 
             if existing:
                 existing.text = title
@@ -408,9 +363,7 @@ class DB:
         session = SessionLocal()
 
         try:
-            grant = session.query(Grant).filter(
-                Grant.id == grant_id
-            ).first()
+            grant = session.query(Grant).filter(Grant.id == grant_id).first()
 
             if not grant:
                 return False
@@ -420,10 +373,7 @@ class DB:
             session.delete(grant)
             session.commit()
 
-            print(
-                f"🗑️ Grant silindi: "
-                f"{grant_id} - {title}"
-            )
+            print(f"🗑️ Grant silindi: " f"{grant_id} - {title}")
 
             return True
 
@@ -444,9 +394,7 @@ class DB:
         session = SessionLocal()
 
         try:
-            grants = session.query(Grant).filter(
-                Grant.id < max_id
-            ).all()
+            grants = session.query(Grant).filter(Grant.id < max_id).all()
 
             deleted_count = len(grants)
 
@@ -458,10 +406,7 @@ class DB:
 
             session.commit()
 
-            print(
-                f"🗑️ {deleted_count} eski grant ve "
-                f"bağlı bildirimleri silindi."
-            )
+            print(f"🗑️ {deleted_count} eski grant ve " f"bağlı bildirimleri silindi.")
 
             return deleted_count
 
@@ -483,17 +428,18 @@ class DB:
         session = SessionLocal()
 
         try:
-            user = session.query(User).filter(
-                User.chat_id == chat_id
-            ).first()
+            user = session.query(User).filter(User.chat_id == chat_id).first()
 
             if not user:
                 return 0
 
-            return session.query(Notification).filter(
-                Notification.user_id == user.id,
-                Notification.sent_at.is_not(None)
-            ).count()
+            return (
+                session.query(Notification)
+                .filter(
+                    Notification.user_id == user.id, Notification.sent_at.is_not(None)
+                )
+                .count()
+            )
 
         finally:
             session.close()
@@ -505,9 +451,7 @@ class DB:
         session = SessionLocal()
 
         try:
-            user = session.query(User).filter(
-                User.chat_id == chat_id
-            ).first()
+            user = session.query(User).filter(User.chat_id == chat_id).first()
 
             if not user:
                 return
@@ -525,14 +469,9 @@ class DB:
         session = SessionLocal()
 
         try:
-            users = session.query(User).filter(
-                User.is_active.is_(True)
-            ).all()
+            users = session.query(User).filter(User.is_active.is_(True)).all()
 
-            return [
-                user.chat_id
-                for user in users
-            ]
+            return [user.chat_id for user in users]
 
         finally:
             session.close()
@@ -544,9 +483,7 @@ class DB:
         session = SessionLocal()
 
         try:
-            user = session.query(User).filter(
-                User.chat_id == chat_id
-            ).first()
+            user = session.query(User).filter(User.chat_id == chat_id).first()
 
             if not user:
                 return {
@@ -555,12 +492,13 @@ class DB:
                     "subscribed": False,
                 }
 
-            notification_count = session.query(
-                Notification
-            ).filter(
-                Notification.user_id == user.id,
-                Notification.sent_at.is_not(None)
-            ).count()
+            notification_count = (
+                session.query(Notification)
+                .filter(
+                    Notification.user_id == user.id, Notification.sent_at.is_not(None)
+                )
+                .count()
+            )
 
             return {
                 "scrapes": user.total_scrapes,
@@ -572,34 +510,30 @@ class DB:
             session.close()
 
     @staticmethod
-    def create_pending_notification(
-        chat_id: int,
-        grant_id: int
-    ) -> bool:
+    def create_pending_notification(chat_id: int, grant_id: int) -> bool:
         """Create a pending notification if one does not already exist."""
 
         session = SessionLocal()
 
         try:
-            user = session.query(User).filter(
-                User.chat_id == chat_id
-            ).first()
+            user = session.query(User).filter(User.chat_id == chat_id).first()
 
             if not user:
                 return False
 
-            existing = session.query(Notification).filter(
-                Notification.user_id == user.id,
-                Notification.grant_id == grant_id
-            ).first()
+            existing = (
+                session.query(Notification)
+                .filter(
+                    Notification.user_id == user.id, Notification.grant_id == grant_id
+                )
+                .first()
+            )
 
             if existing:
                 return False
 
             notification = Notification(
-                user_id=user.id,
-                grant_id=grant_id,
-                sent_at=None
+                user_id=user.id, grant_id=grant_id, sent_at=None
             )
 
             session.add(notification)
@@ -631,20 +565,14 @@ class DB:
                     Grant.title,
                     Grant.start_date,
                     Grant.end_date,
-                    Grant.url
+                    Grant.url,
                 )
-                .join(
-                    User,
-                    Notification.user_id == User.id
-                )
-                .join(
-                    Grant,
-                    Notification.grant_id == Grant.id
-                )
+                .join(User, Notification.user_id == User.id)
+                .join(Grant, Notification.grant_id == Grant.id)
                 .filter(
                     Notification.sent_at.is_(None),
                     User.is_active.is_(True),
-                    User.is_subscribed.is_(True)
+                    User.is_subscribed.is_(True),
                 )
                 .all()
             )
@@ -666,7 +594,7 @@ class DB:
                     grant_title,
                     start_date,
                     end_date,
-                    grant_url
+                    grant_url,
                 ) in rows
             ]
 
@@ -674,19 +602,17 @@ class DB:
             session.close()
 
     @staticmethod
-    def mark_notification_sent(
-        notification_id: int
-    ) -> bool:
+    def mark_notification_sent(notification_id: int) -> bool:
         """Mark a notification as successfully sent."""
 
         session = SessionLocal()
 
         try:
-            notification = session.query(
-                Notification
-            ).filter(
-                Notification.id == notification_id
-            ).first()
+            notification = (
+                session.query(Notification)
+                .filter(Notification.id == notification_id)
+                .first()
+            )
 
             if not notification:
                 return False
@@ -783,9 +709,7 @@ class DB:
         try:
             stats = session.query(Stats).first()
 
-            count = session.query(User).filter(
-                User.is_active.is_(True)
-            ).count()
+            count = session.query(User).filter(User.is_active.is_(True)).count()
 
             if stats:
                 stats.total_users = count
@@ -822,4 +746,3 @@ class DB:
 
         finally:
             session.close()
-
