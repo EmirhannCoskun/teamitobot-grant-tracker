@@ -1,0 +1,12 @@
+target-version = "py312"
+line-length = 88
+
+# Legacy biçimlendirme borcu ayrı work package'larda ele alınır. Canonical quality
+# entrypoint bu dosyalarda E9/F63/F7/F82 correctness kurallarını ayrıca zorlar.
+extend-exclude = ["bot.py", "config.py", "database.py", "scraper.py"]
+
+[lint]
+select = ["E4", "E7", "E9", "F", "I"]
+
+[lint.isort]
+known-first-party = ["bot", "config", "database", "scraper"]
