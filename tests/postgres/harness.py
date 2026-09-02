@@ -10,7 +10,7 @@ from contextlib import contextmanager
 from urllib.parse import urlsplit
 
 from sqlalchemy import text
-from sqlalchemy.engine import Engine
+from sqlalchemy.engine import Engine, make_url
 from sqlalchemy.exc import SQLAlchemyError
 
 SAFE_TEST_HOSTS = {"localhost", "127.0.0.1"}
@@ -38,7 +38,7 @@ def guard_test_database_url(url: str) -> None:
 def redact_database_url(url: str) -> str:
     """Bağlantı hatalarında şifrenin veya query-string secret'larının loglara sızmasını engeller."""
 
-    redacted = re.sub(r"//([^:/@]+):([^@]+)@", r"//\1:***@", url)
+    redacted = make_url(url).render_as_string(hide_password=True)
     return re.sub(r"(?i)([?&](?:password|sslpassword|pwd)=)[^&]*", r"\1***", redacted)
 
 

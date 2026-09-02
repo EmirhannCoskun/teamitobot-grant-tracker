@@ -262,8 +262,8 @@ production'da kullanılan gerçek PostgreSQL major sürümüyle eşleşecek şek
 doğrulanmıştır (GRANT-09 kapsamında Alembic baseline oluşturulurken resmi olarak
 kayıt altına alınacaktır).
 
-`TEST_DATABASE_URL` yalnızca `localhost`/`127.0.0.1` host'una ve adında `test`
-geçen bir veritabanına işaret edebilir; aksi halde testler production'a
+`TEST_DATABASE_URL` yalnızca `localhost`/`127.0.0.1` host'una ve adı `_test` ile
+biten bir veritabanına işaret edebilir; aksi halde testler production'a
 yanlışlıkla bağlanmayı önlemek için hemen hata verir.
 
 ---

@@ -91,8 +91,24 @@ def test_redact_database_url_hides_query_string_password():
     assert "sslpassword=***" in redacted
 
 
+def test_redact_database_url_hides_password_with_empty_username():
+    redacted = redact_database_url("postgresql://:supersecret@localhost:1/itobot_test")
+
+    assert "supersecret" not in redacted
+
+
 def test_connect_or_raise_redacts_credentials_on_failure():
     bad_url = "postgresql://user:supersecret@localhost:1/itobot_test"
+    bad_engine = create_engine(bad_url)
+
+    with pytest.raises(RuntimeError) as excinfo:
+        connect_or_raise(bad_engine, bad_url)
+
+    assert "supersecret" not in str(excinfo.value)
+
+
+def test_connect_or_raise_redacts_password_with_empty_username():
+    bad_url = "postgresql://:supersecret@localhost:1/itobot_test"
     bad_engine = create_engine(bad_url)
 
     with pytest.raises(RuntimeError) as excinfo:
