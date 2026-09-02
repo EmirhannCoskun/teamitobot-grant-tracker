@@ -21,6 +21,7 @@ from telegram.ext import (
 from config import config
 from database import init_db, DB
 from scraper import Scraper
+from smtp_notifier import build_smtp_notifier
 
 import pytz
 from datetime import datetime
@@ -29,6 +30,24 @@ TURKEY_TZ = pytz.timezone("Europe/Istanbul")
 
 # Global state
 last_scrape_time = time.time()
+smtp_notifier = build_smtp_notifier(config)
+
+
+async def send_grant_email_best_effort(grant):
+    """Send optional email without affecting the Telegram delivery path."""
+    if smtp_notifier is None:
+        return False
+
+    try:
+        return await asyncio.to_thread(smtp_notifier.send_grant, grant)
+    except Exception as error:
+        # Defensive boundary for injected/custom notifiers. Never log payloads or
+        # credentials because provider errors can contain sensitive context.
+        print(
+            f"❌ SMTP grant notification failed "
+            f"({type(error).__name__})"
+        )
+        return False
 
 
 # ==========================================
@@ -401,6 +420,8 @@ async def scrape_and_notify_loop(application):
                 # bir sonraki tarama için süreyi yeniden başlat.
                 last_scrape_time = current_time
 
+                new_grants = []
+
                 if current_grants:
 
                     known_grants = {
@@ -550,6 +571,11 @@ async def scrape_and_notify_loop(application):
                                     f"❌ Error sending notification to "
                                     f"{chat_id}: {e}"
                                 )
+
+                # Email is an independent, best-effort fan-out. Running it after
+                # Telegram preserves the existing delivery path when SMTP fails.
+                for grant in new_grants:
+                    await send_grant_email_best_effort(grant)
 
                 # ==========================================
                 # UPDATE USER COUNT

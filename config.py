@@ -18,6 +18,19 @@ class Config:
     BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 
     # ==========================================
+    # SMTP (OPTIONAL)
+    # ==========================================
+
+    SMTP_HOST = os.getenv("SMTP_HOST")
+    SMTP_PORT = os.getenv("SMTP_PORT")
+    SMTP_USERNAME = os.getenv("SMTP_USERNAME")
+    SMTP_PASSWORD = os.getenv("SMTP_PASSWORD")
+    SMTP_FROM = os.getenv("SMTP_FROM")
+    SMTP_TO = os.getenv("SMTP_TO")
+    SMTP_SECURITY = os.getenv("SMTP_SECURITY", "STARTTLS")
+    SMTP_TIMEOUT = os.getenv("SMTP_TIMEOUT", "10")
+
+    # ==========================================
     # DATABASE
     # ==========================================
 
