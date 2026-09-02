@@ -229,6 +229,24 @@ Bot token'ını, database şifresini veya diğer secret bilgileri GitHub reposit
 
 ---
 
+## 🧪 Geliştirme ve Test
+
+Desteklenen Python sürümü **3.12**'dir (bkz. `.python-version`).
+
+Temiz bir checkout'ta aşağıdaki komut kurulum, derleme, lint ve testleri sırayla çalıştırır:
+
+```bash
+python -m pip install -r requirements-dev.txt
+python -m compileall -q . -x venv
+python -m ruff format --check .
+python -m ruff check .
+python -m pytest -q
+```
+
+Bu adımlar `main`'e açılan her pull request için GitHub Actions üzerinde otomatik çalışır ve başarısız olursa birleştirmeyi engeller.
+
+---
+
 ## ☁️ Production
 
 İtobot production ortamında Render üzerinde sürekli çalışacak şekilde yapılandırılmıştır.
