@@ -9,6 +9,7 @@ from pathlib import Path
 REPOSITORY_ROOT = Path(__file__).resolve().parents[1]
 LEGACY_PRODUCTION_MODULES = ("bot.py", "config.py", "database.py", "scraper.py")
 QUALITY_COMMANDS = (
+    ("Install dependencies", ("-m", "pip", "install", "-r", "requirements-dev.txt")),
     ("Compile", ("-m", "compileall", "-q", ".", "-x", r"[\\/]\.?(?:venv|env)[\\/]")),
     ("Ruff format", ("-m", "ruff", "format", "--check", ".")),
     ("Ruff lint", ("-m", "ruff", "check", ".")),

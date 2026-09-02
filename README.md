@@ -233,14 +233,8 @@ Bot token'ını, database şifresini veya diğer secret bilgileri GitHub reposit
 
 Desteklenen çalışma zamanı **Python 3.12.x**'tir (bkz. `.python-version`).
 
-Temiz bir checkout'ta geliştirme bağımlılıklarını bir kez kurun:
-
-```bash
-python -m pip install -r requirements-dev.txt
-```
-
-Ardından compile, Ruff format, Ruff lint, production kritik lint ve fast pytest
-kontrollerinin tamamını tek cross-platform komutla çalıştırın:
+Temiz bir checkout'ta kurulum, compile, Ruff format, Ruff lint, production kritik
+lint ve fast pytest kontrollerinin tamamını tek cross-platform komutla çalıştırın:
 
 ```bash
 python scripts/quality.py
