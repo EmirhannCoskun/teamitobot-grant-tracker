@@ -9,6 +9,7 @@ from datetime import date
 from unittest.mock import MagicMock, patch
 
 from telegram import Update
+from telegram.ext import CommandHandler, MessageHandler
 
 from bot import (
     handle_text,
@@ -750,3 +751,183 @@ def test_polling_configuration():
         assert kwargs["allowed_updates"] == Update.ALL_TYPES
         assert kwargs["timeout"] == 30
         assert kwargs["drop_pending_updates"] is True
+
+
+# ==========================================
+# APPLICATION-LEVEL REGISTRATION TESTS (T21-T23)
+# ===========================================
+
+
+def test_application_handler_registration():
+    """T21: Verify command handlers are registered at application level"""
+    from unittest.mock import AsyncMock, MagicMock, patch
+
+    registered_handlers = []
+
+    def fake_add_handler(handler):
+        registered_handlers.append(handler)
+
+    fake_app = MagicMock()
+    fake_app.add_handler = fake_add_handler
+    fake_app.updater = MagicMock()
+    fake_app.updater.running = False
+    fake_app.initialize = AsyncMock()
+    fake_app.start = AsyncMock()
+    fake_app.stop = AsyncMock()
+
+    async def fake_aenter(self):
+        return fake_app
+
+    async def fake_aexit(self, exc_type, exc_val, exc_tb):
+        await fake_app.stop()
+        return False
+
+    fake_app.__aenter__ = fake_aenter
+    fake_app.__aexit__ = fake_aexit
+
+    class FakeApplicationBuilder:
+        def token(self, token):
+            return self
+
+        def build(self):
+            return fake_app
+
+    with (
+        patch("bot.Application.builder", return_value=FakeApplicationBuilder()),
+        patch("bot.init_db"),
+        patch("bot.DB.get_or_create_stats"),
+        patch("bot.DB.reset_started_at"),
+        patch("threading.Thread"),
+        patch("signal.signal"),
+        patch("bot.scrape_and_notify_loop", side_effect=lambda app: None),
+    ):
+        try:
+            asyncio.run(main())
+        except asyncio.CancelledError:
+            pass
+
+        assert len(registered_handlers) == 4
+
+        command_handlers = [
+            h for h in registered_handlers if isinstance(h, CommandHandler)
+        ]
+        assert len(command_handlers) == 3
+
+        callbacks = {h.callback for h in command_handlers}
+        assert start in callbacks
+        assert help_command in callbacks
+        assert status in callbacks
+
+        message_handlers = [
+            h for h in registered_handlers if isinstance(h, MessageHandler)
+        ]
+        assert len(message_handlers) == 1
+
+
+def test_start_command_keyboard(fake_update, fake_context):
+    """T22: Verify /start sends ReplyKeyboardMarkup with correct buttons"""
+    fake_update_obj = fake_update(chat_id=123, username="testuser")
+
+    fake_user = MagicMock()
+    fake_user.chat_id = 123
+    fake_user.username = "testuser"
+
+    with patch("bot.DB.add_or_get_user", return_value=fake_user):
+
+        async def run_handler():
+            await start(fake_update_obj, fake_context)
+
+        asyncio.run(run_handler())
+
+        assert len(fake_update_obj.message.reply_text_calls) == 1
+        call = fake_update_obj.message.reply_text_calls[0]
+
+        reply_markup = call["reply_markup"]
+        assert reply_markup is not None
+
+        keyboard = reply_markup.keyboard
+        assert len(keyboard) == 3
+        assert len(keyboard[0]) == 2
+        assert len(keyboard[1]) == 2
+        assert len(keyboard[2]) == 2
+
+        button_texts_row0 = [btn.text for btn in keyboard[0]]
+        button_texts_row1 = [btn.text for btn in keyboard[1]]
+        button_texts_row2 = [btn.text for btn in keyboard[2]]
+
+        assert "📨 Abone Ol" in button_texts_row0
+        assert "❌ Abone Olmaktan Çık" in button_texts_row0
+        assert "⏱️ Sonraki Tarama" in button_texts_row1
+        assert "📈 İstatistik" in button_texts_row1
+        assert "🟢 Durum" in button_texts_row2
+        assert "❓ Yardım" in button_texts_row2
+
+        assert reply_markup.resize_keyboard is True
+        assert reply_markup.one_time_keyboard is False
+
+
+def test_send_failure_then_success_second_cycle(fake_application):
+    """T23: Verify loop survives first-cycle send failure and succeeds on second cycle"""
+    fake_notifications = [
+        create_fake_notification(
+            1,
+            123,
+            "Grant 1",
+            "http://example.com/1",
+            date(2024, 1, 1),
+            date(2024, 12, 31),
+        )
+    ]
+
+    mark_sent_calls = []
+
+    def fake_mark_sent(notification_id):
+        mark_sent_calls.append(notification_id)
+        return True
+
+    send_count = [0]
+
+    async def fake_send_message(*args, **kwargs):
+        send_count[0] += 1
+        if send_count[0] == 1:
+            raise Exception("Telegram API error")
+        return MagicMock()
+
+    fake_application.bot.send_message = fake_send_message
+
+    import bot
+
+    original_time = bot.last_scrape_time
+
+    with (
+        patch("bot.DB.get_pending_notifications", return_value=fake_notifications),
+        patch("bot.DB.mark_notification_sent", side_effect=fake_mark_sent),
+        patch("bot.DB.increment_notifications"),
+        patch("bot.DB.update_user_count"),
+        patch("bot.Scraper.scrape", return_value=[]),
+        patch("bot.DB.increment_scrapes"),
+        patch("bot.DB.get_all_grants", return_value=[]),
+        patch("bot.config.CHECK_INTERVAL", 0),
+    ):
+        bot.last_scrape_time = bot.time.time() - 1000
+
+        try:
+
+            async def run_two_cycles():
+                task = asyncio.create_task(scrape_and_notify_loop(fake_application))
+                for _ in range(600):
+                    if send_count[0] >= 2:
+                        break
+                    await asyncio.sleep(0.01)
+                task.cancel()
+                try:
+                    await task
+                except asyncio.CancelledError:
+                    pass
+
+            asyncio.run(run_two_cycles())
+
+            assert send_count[0] >= 2
+            assert len(mark_sent_calls) == 1
+        finally:
+            bot.last_scrape_time = original_time
