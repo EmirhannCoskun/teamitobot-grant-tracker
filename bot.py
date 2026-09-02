@@ -35,7 +35,6 @@ last_scrape_time = time.time()
 # HTTP HEALTH CHECK (For Render)
 # ==========================================
 
-
 class HealthHandler(BaseHTTPRequestHandler):
     """Health check handler"""
 
@@ -78,7 +77,6 @@ def start_health_server():
 # TELEGRAM BOT HANDLERS
 # ==========================================
 
-
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handle /start command - User registration"""
 
@@ -94,7 +92,9 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     ]
 
     reply_markup = ReplyKeyboardMarkup(
-        keyboard, resize_keyboard=True, one_time_keyboard=False
+        keyboard,
+        resize_keyboard=True,
+        one_time_keyboard=False
     )
 
     message = (
@@ -106,7 +106,9 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
 
     await update.message.reply_text(
-        message, reply_markup=reply_markup, parse_mode="Markdown"
+        message,
+        reply_markup=reply_markup,
+        parse_mode="Markdown"
     )
 
     print(f"✅ User {chat_id} started bot")
@@ -137,10 +139,14 @@ async def subscribe(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     else:
         message = (
-            "❌ Kullanıcı kaydı bulunamadı.\n\n" "Lütfen önce /start komutunu gönderin."
+            "❌ Kullanıcı kaydı bulunamadı.\n\n"
+            "Lütfen önce /start komutunu gönderin."
         )
 
-    await update.message.reply_text(message, parse_mode="Markdown")
+    await update.message.reply_text(
+        message,
+        parse_mode="Markdown"
+    )
 
 
 async def unsubscribe(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -162,15 +168,20 @@ async def unsubscribe(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     elif result == "already_unsubscribed":
         message = (
-            "ℹ️ *Zaten Abone Değilsiniz!*\n\n" "Şu anda hibe bildirimi almıyorsunuz."
+            "ℹ️ *Zaten Abone Değilsiniz!*\n\n"
+            "Şu anda hibe bildirimi almıyorsunuz."
         )
 
     else:
         message = (
-            "❌ Kullanıcı kaydı bulunamadı.\n\n" "Lütfen önce /start komutunu gönderin."
+            "❌ Kullanıcı kaydı bulunamadı.\n\n"
+            "Lütfen önce /start komutunu gönderin."
         )
 
-    await update.message.reply_text(message, parse_mode="Markdown")
+    await update.message.reply_text(
+        message,
+        parse_mode="Markdown"
+    )
 
 
 def format_duration(delta_seconds: float) -> str:
@@ -212,7 +223,10 @@ async def status(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "⚙️ *Sistem:* 🟢 Çalışıyor"
     )
 
-    await update.message.reply_text(message, parse_mode="Markdown")
+    await update.message.reply_text(
+        message,
+        parse_mode="Markdown"
+    )
 
 
 async def next_check(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -241,7 +255,10 @@ async def next_check(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "taranıp yeni hibe var mı kontrol ediliyor."
     )
 
-    await update.message.reply_text(message, parse_mode="Markdown")
+    await update.message.reply_text(
+        message,
+        parse_mode="Markdown"
+    )
 
 
 async def stats(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -261,7 +278,9 @@ async def stats(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if started_at.tzinfo is None:
             started_at = TURKEY_TZ.localize(started_at)
 
-        uptime_seconds = (datetime.now(TURKEY_TZ) - started_at).total_seconds()
+        uptime_seconds = (
+            datetime.now(TURKEY_TZ) - started_at
+        ).total_seconds()
 
         uptime_text = format_duration(uptime_seconds)
 
@@ -277,7 +296,9 @@ async def stats(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         last_scrape = last_scrape.astimezone(TURKEY_TZ)
 
-        last_scrape_text = last_scrape.strftime("%d.%m.%Y %H:%M:%S")
+        last_scrape_text = last_scrape.strftime(
+            "%d.%m.%Y %H:%M:%S"
+        )
 
     message = (
         "📊 *İstatistikler*\n\n"
@@ -289,7 +310,10 @@ async def stats(update: Update, context: ContextTypes.DEFAULT_TYPE):
         f"⏱️ Çalışma Süresi: `{uptime_text}`"
     )
 
-    await update.message.reply_text(message, parse_mode="Markdown")
+    await update.message.reply_text(
+        message,
+        parse_mode="Markdown"
+    )
 
 
 async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -306,7 +330,10 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "💡 Herhangi bir sorunla karşılaşırsan lütfen bot yöneticisine bildir."
     )
 
-    await update.message.reply_text(message, parse_mode="Markdown")
+    await update.message.reply_text(
+        message,
+        parse_mode="Markdown"
+    )
 
 
 async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -336,7 +363,6 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
 # ==========================================
 # GRANT SCRAPING & NOTIFICATION LOOP
 # ==========================================
-
 
 async def scrape_and_notify_loop(application):
     """Main grant scraping and notification loop"""
@@ -378,7 +404,11 @@ async def scrape_and_notify_loop(application):
                 if current_grants:
 
                     known_grants = {
-                        (grant.title, grant.start_date, grant.end_date)
+                        (
+                            grant.title,
+                            grant.start_date,
+                            grant.end_date
+                        )
                         for grant in DB.get_all_grants()
                         if grant.title
                     }
@@ -386,8 +416,11 @@ async def scrape_and_notify_loop(application):
                     new_grants = [
                         grant
                         for grant in current_grants
-                        if (grant["title"], grant["start_date"], grant["end_date"])
-                        not in known_grants
+                        if (
+                            grant["title"],
+                            grant["start_date"],
+                            grant["end_date"]
+                        ) not in known_grants
                     ]
 
                     # ==========================================
@@ -396,7 +429,9 @@ async def scrape_and_notify_loop(application):
 
                     if new_grants:
 
-                        print(f"🚨 Found {len(new_grants)} new grants!")
+                        print(
+                            f"🚨 Found {len(new_grants)} new grants!"
+                        )
 
                         subscribed_users = DB.get_subscribed_users()
 
@@ -406,12 +441,15 @@ async def scrape_and_notify_loop(application):
                                 title=grant["title"],
                                 start_date=grant["start_date"],
                                 end_date=grant["end_date"],
-                                url=grant["url"],
+                                url=grant["url"]
                             )
 
                             for chat_id in subscribed_users:
 
-                                DB.create_pending_notification(chat_id, grant_id)
+                                DB.create_pending_notification(
+                                    chat_id,
+                                    grant_id
+                                )
 
                     else:
 
@@ -434,16 +472,25 @@ async def scrape_and_notify_loop(application):
                         if chat_id not in notifications_by_user:
                             notifications_by_user[chat_id] = []
 
-                        notifications_by_user[chat_id].append(notification)
+                        notifications_by_user[chat_id].append(
+                            notification
+                        )
 
                     for chat_id, notifications in notifications_by_user.items():
 
-                        for start_index in range(0, len(notifications), 5):
+                        for start_index in range(
+                            0,
+                            len(notifications),
+                            5
+                        ):
 
-                            batch = notifications[start_index : start_index + 5]
+                            batch = notifications[
+                                start_index:start_index + 5
+                            ]
 
                             message = (
-                                "🚨 *FIRST SİTESİNDE YENİ HİBE " "BİLDİRİMİ!* 🚨\n\n"
+                                "🚨 *FIRST SİTESİNDE YENİ HİBE "
+                                "BİLDİRİMİ!* 🚨\n\n"
                             )
 
                             for index, notification in enumerate(batch, 1):
@@ -453,7 +500,9 @@ async def scrape_and_notify_loop(application):
                                 if len(grant_title) > 80:
                                     grant_title = grant_title[:80] + "..."
 
-                                message += f"{index}. *{grant_title}*\n"
+                                message += (
+                                    f"{index}. *{grant_title}*\n"
+                                )
 
                                 if notification["grant_url"]:
                                     message += (
@@ -527,7 +576,6 @@ async def scrape_and_notify_loop(application):
 # MAIN BOT APPLICATION
 # ==========================================
 
-
 async def main():
     """Main bot function"""
 
@@ -555,13 +603,21 @@ async def main():
     app.add_handler(CommandHandler("help", help_command))
     app.add_handler(CommandHandler("status", status))
 
-    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text))
+    app.add_handler(
+        MessageHandler(
+            filters.TEXT & ~filters.COMMAND,
+            handle_text
+        )
+    )
 
     # ==========================================
     # HEALTH SERVER
     # ==========================================
 
-    health_thread = threading.Thread(target=start_health_server, daemon=True)
+    health_thread = threading.Thread(
+        target=start_health_server,
+        daemon=True
+    )
 
     health_thread.start()
 
@@ -596,7 +652,10 @@ async def main():
 
         signal_name = signal.Signals(signum).name
 
-        print(f"\n🛑 Received {signal_name}. " f"Starting graceful shutdown...")
+        print(
+            f"\n🛑 Received {signal_name}. "
+            f"Starting graceful shutdown..."
+        )
 
         loop.call_soon_threadsafe(stop_event.set)
 
@@ -616,13 +675,20 @@ async def main():
             await app.initialize()
             await app.start()
 
-            scrape_task = asyncio.create_task(scrape_and_notify_loop(app))
-
-            await app.updater.start_polling(
-                allowed_updates=Update.ALL_TYPES, timeout=30, drop_pending_updates=True
+            scrape_task = asyncio.create_task(
+                scrape_and_notify_loop(app)
             )
 
-            print("🤖 Bot polling started, " "listening for commands...")
+            await app.updater.start_polling(
+                allowed_updates=Update.ALL_TYPES,
+                timeout=30,
+                drop_pending_updates=True
+            )
+
+            print(
+                "🤖 Bot polling started, "
+                "listening for commands..."
+            )
 
             await stop_event.wait()
 

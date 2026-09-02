@@ -16,10 +16,8 @@ os.environ["ENVIRONMENT"] = "test"
 @pytest.fixture
 def fake_update():
     """Fixture for creating fake Telegram Update objects"""
-
     def _create_update(chat_id=123, username="testuser", text=None):
         return FakeUpdate(chat_id=chat_id, username=username, text=text)
-
     return _create_update
 
 

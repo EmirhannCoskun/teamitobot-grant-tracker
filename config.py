@@ -37,7 +37,10 @@ class Config:
     # SCRAPER
     # ==========================================
 
-    GRANT_URL = "https://www.firstinspires.org/programs/" "team-grant-opportunities"
+    GRANT_URL = (
+        "https://www.firstinspires.org/programs/"
+        "team-grant-opportunities"
+    )
 
     REQUEST_TIMEOUT = 15
 
@@ -50,10 +53,14 @@ class Config:
         """Validate critical configuration"""
 
         if not Config.BOT_TOKEN:
-            raise ValueError("❌ TELEGRAM_BOT_TOKEN not set in environment variables")
+            raise ValueError(
+                "❌ TELEGRAM_BOT_TOKEN not set in environment variables"
+            )
 
         if not Config.DATABASE_URL:
-            raise ValueError("❌ DATABASE_URL not set in environment variables")
+            raise ValueError(
+                "❌ DATABASE_URL not set in environment variables"
+            )
 
         return True
 

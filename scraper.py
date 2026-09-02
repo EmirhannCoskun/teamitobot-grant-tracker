@@ -9,6 +9,7 @@ import pytz
 
 from config import config
 
+
 TURKEY_TZ = pytz.timezone("Europe/Istanbul")
 
 
@@ -33,7 +34,7 @@ class Scraper:
             response = requests.get(
                 config.GRANT_URL,
                 headers=Scraper.HEADERS,
-                timeout=config.REQUEST_TIMEOUT,
+                timeout=config.REQUEST_TIMEOUT
             )
 
             response.raise_for_status()
@@ -65,7 +66,9 @@ class Scraper:
                 # 2. Check whether grant is for FRC
                 # ------------------------------------------
 
-                frc_program = card.select_one(".grant-programs .program-tag.frc")
+                frc_program = card.select_one(
+                    ".grant-programs .program-tag.frc"
+                )
 
                 if not frc_program:
                     continue
@@ -87,7 +90,10 @@ class Scraper:
                         date_text = text.replace("Start:", "").strip()
 
                         try:
-                            start_date = datetime.strptime(date_text, "%m/%d/%Y").date()
+                            start_date = datetime.strptime(
+                                date_text,
+                                "%m/%d/%Y"
+                            ).date()
                         except ValueError:
                             pass
 
@@ -95,7 +101,10 @@ class Scraper:
                         date_text = text.replace("End:", "").strip()
 
                         try:
-                            end_date = datetime.strptime(date_text, "%m/%d/%Y").date()
+                            end_date = datetime.strptime(
+                                date_text,
+                                "%m/%d/%Y"
+                            ).date()
                         except ValueError:
                             pass
 
@@ -117,15 +126,21 @@ class Scraper:
 
                 grant_url = None
 
-                details_button = card.select_one(".grant-details-toggle[aria-controls]")
+                details_button = card.select_one(
+                    ".grant-details-toggle[aria-controls]"
+                )
 
                 if details_button:
                     details_id = details_button.get("aria-controls")
 
-                    details = soup.select_one(f"#{details_id}")
+                    details = soup.select_one(
+                        f"#{details_id}"
+                    )
 
                     if details:
-                        apply_link = details.select_one("a.grant-apply-btn[href]")
+                        apply_link = details.select_one(
+                            "a.grant-apply-btn[href]"
+                    )
 
                     if apply_link:
                         grant_url = apply_link.get("href")
