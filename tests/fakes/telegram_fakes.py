@@ -4,7 +4,6 @@ Minimal fakes that match production API structure.
 """
 
 from unittest.mock import MagicMock
-from datetime import date
 
 
 class FakeUser:

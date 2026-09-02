@@ -5,24 +5,22 @@ Markdown edge cases, send failure behavior, duplicate commands, and polling poli
 """
 
 import asyncio
-from unittest.mock import patch, MagicMock
 from datetime import date
+from unittest.mock import MagicMock, patch
+
 from telegram import Update
 
 from bot import (
-    start,
-    help_command,
-    status,
-    subscribe,
-    unsubscribe,
-    next_check,
-    stats,
     handle_text,
-    scrape_and_notify_loop,
+    help_command,
     main,
+    next_check,
+    scrape_and_notify_loop,
+    start,
+    stats,
+    status,
 )
 from tests.fakes.telegram_fakes import create_fake_notification
-
 
 # ==========================================
 # COMMAND HANDLER TESTS (T1-T4)

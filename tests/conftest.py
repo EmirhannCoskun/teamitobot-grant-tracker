@@ -3,8 +3,10 @@ Test ortamı için gerekli environment değişkenlerini sağlar
 """
 
 import os
+
 import pytest
-from tests.fakes.telegram_fakes import FakeUpdate, FakeContext, FakeApplication
+
+from tests.fakes.telegram_fakes import FakeApplication, FakeContext, FakeUpdate
 
 # These values intentionally replace ambient credentials before application imports.
 # The reserved .invalid host cannot resolve to a production or staging database.
