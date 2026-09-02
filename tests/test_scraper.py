@@ -4,7 +4,6 @@ from unittest.mock import patch
 
 import pytest
 
-
 FIXTURE_DIR = Path(__file__).parent / "fixtures" / "first"
 
 
@@ -14,16 +13,9 @@ def load_fixture(name: str) -> str:
 
 @pytest.fixture
 def scraper():
-    with patch.dict(
-        "os.environ",
-        {
-            "TELEGRAM_BOT_TOKEN": "123456789:TEST_TOKEN",
-            "DATABASE_URL": "postgresql://test:test@localhost:5432/test",
-        },
-    ):
-        from scraper import Scraper
+    from scraper import Scraper
 
-        return Scraper
+    return Scraper
 
 
 def mock_config(monkeypatch):
@@ -50,9 +42,7 @@ def test_active_frc_grant_is_scraped(scraper, monkeypatch):
 
     with patch("scraper.requests.get", return_value=MockResponse()):
         with patch("scraper.datetime") as mock_datetime:
-            mock_datetime.now.return_value.date.return_value = date(
-                2026, 9, 1
-            )
+            mock_datetime.now.return_value.date.return_value = date(2026, 9, 1)
             mock_datetime.strptime.side_effect = __import__(
                 "datetime"
             ).datetime.strptime
@@ -79,9 +69,7 @@ def test_inactive_frc_grant_is_excluded(scraper, monkeypatch):
 
     with patch("scraper.requests.get", return_value=MockResponse()):
         with patch("scraper.datetime") as mock_datetime:
-            mock_datetime.now.return_value.date.return_value = date(
-                2026, 9, 1
-            )
+            mock_datetime.now.return_value.date.return_value = date(2026, 9, 1)
             mock_datetime.strptime.side_effect = __import__(
                 "datetime"
             ).datetime.strptime
@@ -104,9 +92,7 @@ def test_non_frc_grant_is_excluded(scraper, monkeypatch):
 
     with patch("scraper.requests.get", return_value=MockResponse()):
         with patch("scraper.datetime") as mock_datetime:
-            mock_datetime.now.return_value.date.return_value = date(
-                2026, 9, 1
-            )
+            mock_datetime.now.return_value.date.return_value = date(2026, 9, 1)
             mock_datetime.strptime.side_effect = __import__(
                 "datetime"
             ).datetime.strptime
@@ -129,9 +115,7 @@ def test_relative_url_is_normalized(scraper, monkeypatch):
 
     with patch("scraper.requests.get", return_value=MockResponse()):
         with patch("scraper.datetime") as mock_datetime:
-            mock_datetime.now.return_value.date.return_value = date(
-                2026, 9, 1
-            )
+            mock_datetime.now.return_value.date.return_value = date(2026, 9, 1)
             mock_datetime.strptime.side_effect = __import__(
                 "datetime"
             ).datetime.strptime
@@ -139,9 +123,7 @@ def test_relative_url_is_normalized(scraper, monkeypatch):
             grants = scraper.scrape()
 
     assert len(grants) == 1
-    assert grants[0]["url"].startswith(
-        "https://www.firstinspires.org/"
-    )
+    assert grants[0]["url"].startswith("https://www.firstinspires.org/")
 
 
 def test_duplicate_grants_are_deduplicated(scraper, monkeypatch):
@@ -157,9 +139,7 @@ def test_duplicate_grants_are_deduplicated(scraper, monkeypatch):
 
     with patch("scraper.requests.get", return_value=MockResponse()):
         with patch("scraper.datetime") as mock_datetime:
-            mock_datetime.now.return_value.date.return_value = date(
-                2026, 9, 1
-            )
+            mock_datetime.now.return_value.date.return_value = date(2026, 9, 1)
             mock_datetime.strptime.side_effect = __import__(
                 "datetime"
             ).datetime.strptime
@@ -182,9 +162,7 @@ def test_missing_details_does_not_crash(scraper, monkeypatch):
 
     with patch("scraper.requests.get", return_value=MockResponse()):
         with patch("scraper.datetime") as mock_datetime:
-            mock_datetime.now.return_value.date.return_value = date(
-                2026, 9, 1
-            )
+            mock_datetime.now.return_value.date.return_value = date(2026, 9, 1)
             mock_datetime.strptime.side_effect = __import__(
                 "datetime"
             ).datetime.strptime
@@ -208,9 +186,7 @@ def test_malformed_date_is_excluded(scraper, monkeypatch):
 
     with patch("scraper.requests.get", return_value=MockResponse()):
         with patch("scraper.datetime") as mock_datetime:
-            mock_datetime.now.return_value.date.return_value = date(
-                2026, 9, 1
-            )
+            mock_datetime.now.return_value.date.return_value = date(2026, 9, 1)
             mock_datetime.strptime.side_effect = __import__(
                 "datetime"
             ).datetime.strptime
@@ -233,9 +209,7 @@ def test_empty_page_returns_empty_list(scraper, monkeypatch):
 
     with patch("scraper.requests.get", return_value=MockResponse()):
         with patch("scraper.datetime") as mock_datetime:
-            mock_datetime.now.return_value.date.return_value = date(
-                2026, 9, 1
-            )
+            mock_datetime.now.return_value.date.return_value = date(2026, 9, 1)
 
             grants = scraper.scrape()
 
