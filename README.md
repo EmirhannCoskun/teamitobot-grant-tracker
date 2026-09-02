@@ -2,7 +2,7 @@
 
 <div align="center">
 
-![Python](https://img.shields.io/badge/Python-3.12+-blue)
+![Python](https://img.shields.io/badge/Python-3.12.x-blue)
 
 ![Status](https://img.shields.io/badge/Status-Active-brightgreen)
 
@@ -218,7 +218,7 @@ Bot token'ını, database şifresini veya diğer secret bilgileri GitHub reposit
 
 ## 🛠️ Teknolojiler
 
-* **Python 3.12+** - Programlama dili
+* **Python 3.12.x** - Desteklenen çalışma zamanı
 * **python-telegram-bot** - Telegram Bot API
 * **BeautifulSoup4** - Web scraping
 * **Requests** - HTTP istekleri
@@ -231,19 +231,24 @@ Bot token'ını, database şifresini veya diğer secret bilgileri GitHub reposit
 
 ## 🧪 Geliştirme ve Test
 
-Desteklenen Python sürümü **3.12**'dir (bkz. `.python-version`).
+Desteklenen çalışma zamanı **Python 3.12.x**'tir (bkz. `.python-version`).
 
-Temiz bir checkout'ta aşağıdaki komut kurulum, derleme, lint ve testleri sırayla çalıştırır:
+Temiz bir checkout'ta geliştirme bağımlılıklarını bir kez kurun:
 
 ```bash
 python -m pip install -r requirements-dev.txt
-python -m compileall -q . -x venv
-python -m ruff format --check .
-python -m ruff check .
-python -m pytest -q
 ```
 
-Bu adımlar `main`'e açılan her pull request için GitHub Actions üzerinde otomatik çalışır ve başarısız olursa birleştirmeyi engeller.
+Ardından compile, Ruff format, Ruff lint, production kritik lint ve fast pytest
+kontrollerinin tamamını tek cross-platform komutla çalıştırın:
+
+```bash
+python scripts/quality.py
+```
+
+GitHub Actions da `main`'e açılan her pull request için aynı canonical quality
+entrypoint'i çalıştırır. Merge engellemesi repository branch protection/ruleset
+ayarındaki required `fast-checks` status check'ine bağlıdır.
 
 ---
 

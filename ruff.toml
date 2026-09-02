@@ -1,8 +1,8 @@
 target-version = "py312"
 line-length = 88
 
-# Mevcut ana modüller kendi work package'ları kapsamında biçimlendirilecek;
-# bu gate yeni eklenen kod (CI, testler) üzerinde zorlanır.
+# Legacy biçimlendirme borcu ayrı work package'larda ele alınır. Canonical quality
+# entrypoint bu dosyalarda E9/F63/F7/F82 correctness kurallarını ayrıca zorlar.
 extend-exclude = ["bot.py", "config.py", "database.py", "scraper.py"]
 
 [lint]

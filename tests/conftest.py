@@ -4,5 +4,8 @@ Test ortamı için gerekli environment değişkenlerini sağlar
 
 import os
 
-os.environ.setdefault("TELEGRAM_BOT_TOKEN", "test-token")
-os.environ.setdefault("DATABASE_URL", "postgresql://test:test@localhost:5432/test")
+# These values intentionally replace ambient credentials before application imports.
+# The reserved .invalid host cannot resolve to a production or staging database.
+os.environ["TELEGRAM_BOT_TOKEN"] = "test-token-not-a-real-credential"
+os.environ["DATABASE_URL"] = "postgresql://test:test@database.invalid:5432/itobot_test"
+os.environ["ENVIRONMENT"] = "test"
