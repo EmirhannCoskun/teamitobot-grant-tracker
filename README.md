@@ -6,7 +6,7 @@
 
 ![Status](https://img.shields.io/badge/Status-Active-brightgreen)
 
-**FIRST Robotics hibe fırsatlarını otomatik olarak takip eden Telegram botu**
+**FIRST Robotics hibe fırsatlarını otomatik olarak takip eden Telegram ve e-posta bildirim botu**
 
 [Hızlı Başlangıç](#-hızlı-başlangıç) • [Özellikler](#-özellikler) • [Çalışma Mantığı](#-çalışma-mantığı) • [Kurulum](#-kurulum) • [Bot Komutları](#-bot-komutları)
 
@@ -35,6 +35,7 @@ Kullanıcıların herhangi bir kod değişikliği yapmasına gerek yoktur. Teleg
 
 * 🔍 **Otomatik Tarama** - FIRST hibe portalını 15 dakikada bir kontrol eder
 * 🚨 **Otomatik Bildirim** - Yeni FRC hibeleri bulunduğunda abone kullanıcılara Telegram bildirimi gönderir
+* ✉️ **SMTP Bildirimi** - Yapılandırıldığında yeni hibeleri operasyon e-posta adreslerine de gönderir
 * 🔗 **Doğrudan Başvuru Linki** - Bildirimlerde ilgili hibenin başvuru bağlantısı bulunur
 * 📅 **Hibe Tarihleri** - Başlangıç ve bitiş tarihleri bildirimlerde gösterilir
 * 👥 **Çok Kullanıcı Desteği** - Birden fazla kullanıcı aynı botu kullanabilir
@@ -128,6 +129,32 @@ Ayrıca aynı kullanıcı için aynı hibe hakkında birden fazla bildirim oluş
 
 Bundan sonra yeni FRC hibe fırsatları bulunduğunda Telegram üzerinden bildirim alırsınız.
 
+### SMTP operasyon konfigürasyonu
+
+v0.2.0 — Operational Grant Notifications sürümünde SMTP kanalı opsiyoneldir ve
+yalnız runtime environment üzerinden yapılandırılır. Aşağıdaki altı değişken birlikte
+sağlanmalıdır; değerlerini source code'a veya repository'ye yazmayın:
+
+| Değişken | Açıklama |
+| --- | --- |
+| `SMTP_HOST` | SMTP provider host adı |
+| `SMTP_PORT` | Provider'ın güvenli SMTP portu (`587` veya `465` gibi) |
+| `SMTP_USERNAME` | SMTP kullanıcı adı |
+| `SMTP_PASSWORD` | SMTP parolası; provider secret store'da tutulur |
+| `SMTP_FROM` | Gönderen e-posta adresi |
+| `SMTP_TO` | Virgülle ayrılabilen alıcı adresleri |
+
+Opsiyonel `SMTP_SECURITY`, güvenli varsayılan olan `STARTTLS` değerini kullanır.
+Implicit TLS isteyen provider'lar için `SSL` olarak ayarlanmalıdır. Plaintext modu
+desteklenmez. `SMTP_TIMEOUT` saniye cinsinden pozitif bir ağ timeout'udur ve varsayılanı
+`10` değeridir. SMTP değişkenleri hiç verilmezse e-posta kanalı kapalı kalır; kısmi veya
+geçersiz config secret değerleri yazılmadan loglanır ve Telegram akışı çalışmaya devam
+eder.
+
+SMTP gönderimi bu operasyonel ara sürümde best-effort'tur. SMTP/Telegram fan-out henüz
+durable/atomic değildir; kalıcı güvenilirlik çözümü architecture roadmap'indeki
+Transactional Outbox görevlerinde kalır.
+
 ---
 
 ## 🤖 Bot Komutları
@@ -183,6 +210,7 @@ frc-grant-tracker/
 ├── 📄 bot.py                 ← Ana Telegram botu
 ├── 📄 database.py            ← PostgreSQL modelleri ve işlemleri
 ├── 📄 scraper.py             ← FIRST hibe scraper'ı
+├── 📄 smtp_notifier.py       ← Best-effort SMTP bildirim adaptörü
 ├── 📄 config.py              ← Konfigürasyon yönetimi
 │
 ├── 📄 .env                   ← Environment değişkenleri
@@ -204,6 +232,7 @@ Production ortamında tüm kalıcı veriler **PostgreSQL** üzerinde tutulur.
 ## 🔐 Güvenlik
 
 * ✅ Telegram bot token'ı environment değişkeni üzerinden okunur
+* ✅ SMTP credentials yalnız runtime environment/provider secret store'dan okunur
 * ✅ Secret değerler GitHub repository'sine commit edilmez
 * ✅ Environment değişkenleri production configuration için kullanılır
 * ✅ SQLAlchemy ORM kullanılır
@@ -285,7 +314,9 @@ Bot ayrıca Render health-check sistemi tarafından kontrol edilebilen bir HTTP 
 * 🟢 Başarılı taramalar istatistiklere eklenir
 * ⚠️ Başarısız taramalar başarılı tarama sayısına eklenmez
 * 🚨 Yeni hibeler abone kullanıcılara bildirilir
+* ✉️ SMTP yapılandırılmışsa yeni hibeler operasyon alıcılarına da bildirilir
 * 🔁 Başarısız Telegram gönderimleri daha sonra tekrar denenebilir
+* ⚠️ SMTP gönderimi best-effort'tur; başarısızlık Telegram akışını durdurmaz
 * 🛑 Render tarafından gönderilen SIGTERM sinyali kontrollü şekilde işlenir
 
 ---
