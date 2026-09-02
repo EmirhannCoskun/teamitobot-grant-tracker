@@ -273,6 +273,28 @@ GitHub Actions da `main`'e açılan her pull request için aynı canonical quali
 entrypoint'i çalıştırır. Merge engellemesi repository branch protection/ruleset
 ayarındaki required `fast-checks` status check'ine bağlıdır.
 
+### PostgreSQL Test Altyapısı
+
+`tests/postgres/` altındaki testler gerçek, izole bir PostgreSQL'e ihtiyaç duyar
+ve `TEST_DATABASE_URL` tanımlı değilse otomatik olarak atlanır — `scripts/quality.py`
+akışını etkilemezler.
+
+Lokalde çalıştırmak için:
+
+```bash
+docker compose -f docker-compose.test.yml up -d
+TEST_DATABASE_URL=postgresql://postgres:postgres@localhost:5433/itobot_test python -m pytest tests/postgres -q
+```
+
+CI aynı testleri `postgres:16` service container'ı ile çalıştırır. Bu sürüm,
+production'da kullanılan gerçek PostgreSQL major sürümüyle eşleşecek şekilde
+doğrulanmıştır (GRANT-09 kapsamında Alembic baseline oluşturulurken resmi olarak
+kayıt altına alınacaktır).
+
+`TEST_DATABASE_URL` yalnızca `localhost`/`127.0.0.1` host'una ve adı `_test` ile
+biten bir veritabanına işaret edebilir; aksi halde testler production'a
+yanlışlıkla bağlanmayı önlemek için hemen hata verir.
+
 ---
 
 ## ☁️ Production
