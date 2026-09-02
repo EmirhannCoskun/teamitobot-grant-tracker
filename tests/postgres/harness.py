@@ -11,6 +11,7 @@ from urllib.parse import urlsplit
 
 from sqlalchemy import text
 from sqlalchemy.engine import Engine
+from sqlalchemy.exc import SQLAlchemyError
 
 SAFE_TEST_HOSTS = {"localhost", "127.0.0.1"}
 
@@ -25,17 +26,33 @@ def guard_test_database_url(url: str) -> None:
             f"TEST_DATABASE_URL güvenli olmayan bir host'a işaret ediyor: {parsed.hostname!r}"
         )
 
-    if "test" not in (parsed.path or "").lower():
+    database_name = (parsed.path or "").lstrip("/").lower()
+
+    if not database_name.endswith("_test"):
         raise RuntimeError(
-            "TEST_DATABASE_URL veritabanı adı 'test' içermiyor, production'a "
-            "yanlışlıkla bağlanma riskine karşı reddedildi."
+            f"TEST_DATABASE_URL veritabanı adı {database_name!r} '_test' ile "
+            "bitmiyor, production'a yanlışlıkla bağlanma riskine karşı reddedildi."
         )
 
 
 def redact_database_url(url: str) -> str:
-    """Bağlantı hatalarında şifrenin loglara sızmasını engeller."""
+    """Bağlantı hatalarında şifrenin veya query-string secret'larının loglara sızmasını engeller."""
 
-    return re.sub(r"//([^:/@]+):([^@]+)@", r"//\1:***@", url)
+    redacted = re.sub(r"//([^:/@]+):([^@]+)@", r"//\1:***@", url)
+    return re.sub(r"(?i)([?&](?:password|sslpassword|pwd)=)[^&]*", r"\1***", redacted)
+
+
+def connect_or_raise(engine: Engine, url: str) -> None:
+    """Bağlantıyı dener; hata olursa şifreyi loglamadan redakte edilmiş mesajla durdurur."""
+
+    try:
+        with engine.connect():
+            pass
+    except SQLAlchemyError as error:
+        raise RuntimeError(
+            f"PostgreSQL'e bağlanılamadı ({redact_database_url(url)}): "
+            f"{error.__class__.__name__}"
+        ) from None
 
 
 @contextmanager

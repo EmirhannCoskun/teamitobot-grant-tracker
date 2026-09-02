@@ -258,8 +258,9 @@ TEST_DATABASE_URL=postgresql://postgres:postgres@localhost:5433/itobot_test pyth
 ```
 
 CI aynı testleri `postgres:16` service container'ı ile çalıştırır. Bu sürüm,
-production'daki gerçek PostgreSQL major sürümü GRANT-09 kapsamında kayıt altına
-alınana kadar geçici bir varsayımdır; kayıt netleşince burada ve CI'da güncellenmelidir.
+production'da kullanılan gerçek PostgreSQL major sürümüyle eşleşecek şekilde
+doğrulanmıştır (GRANT-09 kapsamında Alembic baseline oluşturulurken resmi olarak
+kayıt altına alınacaktır).
 
 `TEST_DATABASE_URL` yalnızca `localhost`/`127.0.0.1` host'una ve adında `test`
 geçen bir veritabanına işaret edebilir; aksi halde testler production'a

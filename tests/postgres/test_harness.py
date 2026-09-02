@@ -3,9 +3,14 @@
 """
 
 import pytest
-from sqlalchemy import text
+from sqlalchemy import create_engine, text
 
-from harness import guard_test_database_url, isolated_schema, redact_database_url
+from harness import (
+    connect_or_raise,
+    guard_test_database_url,
+    isolated_schema,
+    redact_database_url,
+)
 
 
 def test_connectivity(pg_engine):
@@ -62,6 +67,12 @@ def test_guard_rejects_non_test_database_name():
         guard_test_database_url("postgresql://user:pass@localhost/itobot")
 
 
+@pytest.mark.parametrize("database_name", ["latest", "contest"])
+def test_guard_rejects_test_lookalike_names(database_name):
+    with pytest.raises(RuntimeError):
+        guard_test_database_url(f"postgresql://user:pass@localhost/{database_name}")
+
+
 def test_redact_database_url_hides_password():
     redacted = redact_database_url(
         "postgresql://user:supersecret@localhost/itobot_test"
@@ -69,3 +80,22 @@ def test_redact_database_url_hides_password():
 
     assert "supersecret" not in redacted
     assert "user:***@" in redacted
+
+
+def test_redact_database_url_hides_query_string_password():
+    redacted = redact_database_url(
+        "postgresql://localhost/itobot_test?sslpassword=supersecret"
+    )
+
+    assert "supersecret" not in redacted
+    assert "sslpassword=***" in redacted
+
+
+def test_connect_or_raise_redacts_credentials_on_failure():
+    bad_url = "postgresql://user:supersecret@localhost:1/itobot_test"
+    bad_engine = create_engine(bad_url)
+
+    with pytest.raises(RuntimeError) as excinfo:
+        connect_or_raise(bad_engine, bad_url)
+
+    assert "supersecret" not in str(excinfo.value)
