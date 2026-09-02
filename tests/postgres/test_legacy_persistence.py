@@ -23,8 +23,6 @@ def legacy_database(pg_engine, monkeypatch):
 
         Base.metadata.create_all(schema_engine)
 
-        
-
         TestSessionLocal = sessionmaker(
             autocommit=False,
             autoflush=False,
@@ -54,7 +52,8 @@ def test_database_fixture_isolated(legacy_database):
         assert session.query(Notification).count() == 0
     finally:
         session.close()
-        
+
+
 def test_add_or_get_user_keeps_chat_id_unique(legacy_database):
     from database import DB
 
@@ -71,16 +70,15 @@ def test_add_or_get_user_keeps_chat_id_unique(legacy_database):
     session = legacy_database["session_factory"]()
 
     try:
-        users = session.query(User).filter(
-            User.chat_id == 123456
-        ).all()
+        users = session.query(User).filter(User.chat_id == 123456).all()
 
         assert len(users) == 1
         assert users[0].username == "first_user"
 
     finally:
         session.close()
-        
+
+
 def test_add_grant_same_title_overwrites_existing_grant(legacy_database):
     from database import DB
 
@@ -118,7 +116,8 @@ def test_add_grant_same_title_overwrites_existing_grant(legacy_database):
 
     finally:
         session.close()
-        
+
+
 def test_pending_notification_is_unique_per_user_and_grant(
     legacy_database,
 ):
@@ -148,9 +147,7 @@ def test_pending_notification_is_unique_per_user_and_grant(
     session = legacy_database["session_factory"]()
 
     try:
-        user = session.query(User).filter(
-            User.chat_id == chat_id
-        ).one()
+        user = session.query(User).filter(User.chat_id == chat_id).one()
 
         notifications = session.query(Notification).all()
 
@@ -166,7 +163,8 @@ def test_pending_notification_is_unique_per_user_and_grant(
 
     finally:
         session.close()
-        
+
+
 def test_notification_moves_from_pending_to_sent(
     legacy_database,
 ):
@@ -200,9 +198,7 @@ def test_notification_moves_from_pending_to_sent(
 
     notification_id = pending[0]["notification_id"]
 
-    marked_sent = DB.mark_notification_sent(
-        notification_id
-    )
+    marked_sent = DB.mark_notification_sent(notification_id)
 
     assert marked_sent is True
 
@@ -213,16 +209,16 @@ def test_notification_moves_from_pending_to_sent(
     session = legacy_database["session_factory"]()
 
     try:
-        notification = session.query(Notification).filter(
-            Notification.id == notification_id
-        ).one()
+        notification = (
+            session.query(Notification).filter(Notification.id == notification_id).one()
+        )
 
         assert notification.sent_at is not None
 
     finally:
         session.close()
-        
-        
+
+
 def test_unsubscribe_cancels_pending_notifications(
     legacy_database,
 ):
@@ -241,10 +237,13 @@ def test_unsubscribe_cancels_pending_notifications(
         title="FIRST Robotics Grant",
     )
 
-    assert DB.create_pending_notification(
-        chat_id=chat_id,
-        grant_id=grant_id,
-    ) is True
+    assert (
+        DB.create_pending_notification(
+            chat_id=chat_id,
+            grant_id=grant_id,
+        )
+        is True
+    )
 
     # Notification gerçekten pending durumda mı?
     pending_before = DB.get_pending_notifications()
@@ -265,21 +264,22 @@ def test_unsubscribe_cancels_pending_notifications(
     session = legacy_database["session_factory"]()
 
     try:
-        notification = session.query(Notification).filter(
-            Notification.id == notification_id
-        ).first()
+        notification = (
+            session.query(Notification)
+            .filter(Notification.id == notification_id)
+            .first()
+        )
 
         assert notification is None
 
-        user = session.query(User).filter(
-            User.chat_id == chat_id
-        ).one()
+        user = session.query(User).filter(User.chat_id == chat_id).one()
 
         assert user.is_subscribed is False
 
     finally:
         session.close()
-        
+
+
 def test_increment_notifications_updates_stats(
     legacy_database,
 ):
@@ -291,11 +291,7 @@ def test_increment_notifications_updates_stats(
     session = legacy_database["session_factory"]()
 
     try:
-        initial_notifications = (
-            session.query(Stats)
-            .first()
-            .total_notifications
-        )
+        initial_notifications = session.query(Stats).first().total_notifications
     finally:
         session.close()
 
@@ -305,17 +301,14 @@ def test_increment_notifications_updates_stats(
     session = legacy_database["session_factory"]()
 
     try:
-        updated_notifications = (
-            session.query(Stats)
-            .first()
-            .total_notifications
-        )
+        updated_notifications = session.query(Stats).first().total_notifications
 
         assert updated_notifications == initial_notifications + 1
 
     finally:
         session.close()
-        
+
+
 def test_partial_fan_out_failure_leaves_failed_notification_pending(
     legacy_database,
 ):
@@ -345,15 +338,21 @@ def test_partial_fan_out_failure_leaves_failed_notification_pending(
     )
 
     # Her kullanıcı için pending notification oluştur.
-    assert DB.create_pending_notification(
-        successful_chat_id,
-        grant_id,
-    ) is True
+    assert (
+        DB.create_pending_notification(
+            successful_chat_id,
+            grant_id,
+        )
+        is True
+    )
 
-    assert DB.create_pending_notification(
-        failed_chat_id,
-        grant_id,
-    ) is True
+    assert (
+        DB.create_pending_notification(
+            failed_chat_id,
+            grant_id,
+        )
+        is True
+    )
 
     pending_before = DB.get_pending_notifications()
 
@@ -366,9 +365,7 @@ def test_partial_fan_out_failure_leaves_failed_notification_pending(
         if notification["chat_id"] == successful_chat_id
     )
 
-    assert DB.mark_notification_sent(
-        successful_notification["notification_id"]
-    ) is True
+    assert DB.mark_notification_sent(successful_notification["notification_id"]) is True
 
     # Başarısız kullanıcı için hiçbir işlem yapmıyoruz.
     # Bu, send_message failure sonrası pending kalmasını temsil ediyor.
@@ -378,8 +375,8 @@ def test_partial_fan_out_failure_leaves_failed_notification_pending(
     assert len(pending_after) == 1
     assert pending_after[0]["chat_id"] == failed_chat_id
     assert pending_after[0]["grant_id"] == grant_id
-    
-    
+
+
 def test_unsubscribed_user_notifications_are_not_returned_as_pending(
     legacy_database,
 ):
@@ -410,7 +407,8 @@ def test_unsubscribed_user_notifications_are_not_returned_as_pending(
     pending = DB.get_pending_notifications()
 
     assert pending == []
-    
+
+
 def test_delete_grant_removes_related_notifications(
     legacy_database,
 ):
@@ -429,21 +427,25 @@ def test_delete_grant_removes_related_notifications(
         title="Grant To Delete",
     )
 
-    assert DB.create_pending_notification(
-        chat_id=chat_id,
-        grant_id=grant_id,
-    ) is True
+    assert (
+        DB.create_pending_notification(
+            chat_id=chat_id,
+            grant_id=grant_id,
+        )
+        is True
+    )
 
     session = legacy_database["session_factory"]()
 
     try:
-        assert session.query(Grant).filter(
-            Grant.id == grant_id
-        ).count() == 1
+        assert session.query(Grant).filter(Grant.id == grant_id).count() == 1
 
-        assert session.query(Notification).filter(
-            Notification.grant_id == grant_id
-        ).count() == 1
+        assert (
+            session.query(Notification)
+            .filter(Notification.grant_id == grant_id)
+            .count()
+            == 1
+        )
 
     finally:
         session.close()
@@ -457,18 +459,20 @@ def test_delete_grant_removes_related_notifications(
 
     try:
         # Grant artık olmamalı.
-        assert session.query(Grant).filter(
-            Grant.id == grant_id
-        ).count() == 0
+        assert session.query(Grant).filter(Grant.id == grant_id).count() == 0
 
         # Grant'e bağlı notification da cascade ile silinmeli.
-        assert session.query(Notification).filter(
-            Notification.grant_id == grant_id
-        ).count() == 0
+        assert (
+            session.query(Notification)
+            .filter(Notification.grant_id == grant_id)
+            .count()
+            == 0
+        )
 
     finally:
         session.close()
-        
+
+
 def test_delete_missing_grant_returns_false(
     legacy_database,
 ):
@@ -476,9 +480,7 @@ def test_delete_missing_grant_returns_false(
 
     missing_grant_id = 999999
 
-    deleted = DB.delete_grant(
-        missing_grant_id
-    )
+    deleted = DB.delete_grant(missing_grant_id)
 
     assert deleted is False
 
@@ -490,7 +492,8 @@ def test_delete_missing_grant_returns_false(
 
     finally:
         session.close()
-        
+
+
 def test_pending_notifications_only_include_active_subscribed_users(
     legacy_database,
 ):
@@ -517,13 +520,9 @@ def test_pending_notifications_only_include_active_subscribed_users(
     )
 
     # İlk ve üçüncü kullanıcıyı abone yap.
-    assert DB.subscribe_user(
-        active_subscribed_chat_id
-    ) == "subscribed"
+    assert DB.subscribe_user(active_subscribed_chat_id) == "subscribed"
 
-    assert DB.subscribe_user(
-        inactive_subscribed_chat_id
-    ) == "subscribed"
+    assert DB.subscribe_user(inactive_subscribed_chat_id) == "subscribed"
 
     # Ortak grant oluştur.
     grant_id = DB.add_grant(
@@ -531,28 +530,39 @@ def test_pending_notifications_only_include_active_subscribed_users(
     )
 
     # Üç kullanıcı için de pending notification oluştur.
-    assert DB.create_pending_notification(
-        active_subscribed_chat_id,
-        grant_id,
-    ) is True
+    assert (
+        DB.create_pending_notification(
+            active_subscribed_chat_id,
+            grant_id,
+        )
+        is True
+    )
 
-    assert DB.create_pending_notification(
-        unsubscribed_chat_id,
-        grant_id,
-    ) is True
+    assert (
+        DB.create_pending_notification(
+            unsubscribed_chat_id,
+            grant_id,
+        )
+        is True
+    )
 
-    assert DB.create_pending_notification(
-        inactive_subscribed_chat_id,
-        grant_id,
-    ) is True
+    assert (
+        DB.create_pending_notification(
+            inactive_subscribed_chat_id,
+            grant_id,
+        )
+        is True
+    )
 
     # Üçüncü kullanıcıyı database seviyesinde pasif yap.
     session = legacy_database["session_factory"]()
 
     try:
-        inactive_user = session.query(User).filter(
-            User.chat_id == inactive_subscribed_chat_id
-        ).one()
+        inactive_user = (
+            session.query(User)
+            .filter(User.chat_id == inactive_subscribed_chat_id)
+            .one()
+        )
 
         inactive_user.is_active = False
         session.commit()
@@ -565,12 +575,11 @@ def test_pending_notifications_only_include_active_subscribed_users(
 
     assert len(pending) == 1
 
-    assert pending[0]["chat_id"] == (
-        active_subscribed_chat_id
-    )
+    assert pending[0]["chat_id"] == (active_subscribed_chat_id)
 
     assert pending[0]["grant_id"] == grant_id
-    
+
+
 def test_mark_notification_sent_is_idempotent(
     legacy_database,
 ):
@@ -592,10 +601,13 @@ def test_mark_notification_sent_is_idempotent(
     )
 
     # Pending notification oluştur.
-    assert DB.create_pending_notification(
-        chat_id=chat_id,
-        grant_id=grant_id,
-    ) is True
+    assert (
+        DB.create_pending_notification(
+            chat_id=chat_id,
+            grant_id=grant_id,
+        )
+        is True
+    )
 
     pending = DB.get_pending_notifications()
 
@@ -604,16 +616,12 @@ def test_mark_notification_sent_is_idempotent(
     notification_id = pending[0]["notification_id"]
 
     # İlk gönderim başarılı olmalı.
-    first_result = DB.mark_notification_sent(
-        notification_id
-    )
+    first_result = DB.mark_notification_sent(notification_id)
 
     assert first_result is True
 
     # Aynı notification tekrar gönderilmiş sayılmamalı.
-    second_result = DB.mark_notification_sent(
-        notification_id
-    )
+    second_result = DB.mark_notification_sent(notification_id)
 
     assert second_result is False
 
@@ -622,15 +630,18 @@ def test_mark_notification_sent_is_idempotent(
     session = legacy_database["session_factory"]()
 
     try:
-        notification = session.query(Notification).filter(
-            Notification.id == notification_id
-        ).one()
+        notification = (
+            session.query(Notification).filter(Notification.id == notification_id).one()
+        )
 
         assert notification.sent_at is not None
 
-        assert session.query(Notification).filter(
-            Notification.id == notification_id
-        ).count() == 1
+        assert (
+            session.query(Notification)
+            .filter(Notification.id == notification_id)
+            .count()
+            == 1
+        )
 
     finally:
         session.close()
