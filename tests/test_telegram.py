@@ -330,6 +330,10 @@ def test_notification_batching_5(fake_application):
             message = fake_application.bot.send_message_calls[0]["text"]
             assert "1." in message
             assert "5." in message
+
+            call = fake_application.bot.send_message_calls[0]
+            assert call["parse_mode"] == "Markdown"
+            assert call["disable_web_page_preview"] is True
         finally:
             bot.last_scrape_time = original_time
 
@@ -389,6 +393,10 @@ def test_notification_batching_11(fake_application):
 
             assert len(fake_application.bot.send_message_calls) == 3
             assert len(mark_sent_calls) == 11
+
+            for call in fake_application.bot.send_message_calls:
+                assert call["parse_mode"] == "Markdown"
+                assert call["disable_web_page_preview"] is True
 
             # First batch: 5 items (numbered 1-5 within batch)
             first_message = fake_application.bot.send_message_calls[0]["text"]
@@ -471,6 +479,10 @@ def test_title_truncation(fake_application):
                 "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA..."
                 in message
             )
+
+            call = fake_application.bot.send_message_calls[0]
+            assert call["parse_mode"] == "Markdown"
+            assert call["disable_web_page_preview"] is True
         finally:
             bot.last_scrape_time = original_time
 
@@ -525,6 +537,10 @@ def test_markdown_special_chars(fake_application):
             assert "*" in message
             assert "_" in message
             assert "`" in message
+
+            call = fake_application.bot.send_message_calls[0]
+            assert call["parse_mode"] == "Markdown"
+            assert call["disable_web_page_preview"] is True
         finally:
             bot.last_scrape_time = original_time
 
@@ -569,6 +585,10 @@ def test_missing_optional_fields(fake_application):
             # Should not contain URL or date markers
             assert "🔗" not in message
             assert "📅" not in message
+
+            call = fake_application.bot.send_message_calls[0]
+            assert call["parse_mode"] == "Markdown"
+            assert call["disable_web_page_preview"] is True
         finally:
             bot.last_scrape_time = original_time
 
@@ -759,7 +779,7 @@ def test_polling_configuration():
 
 
 def test_application_handler_registration():
-    """T21: Verify command handlers are registered at application level"""
+    """T21: Verify exact command→callback and text→callback mappings at application level"""
     from unittest.mock import AsyncMock, MagicMock, patch
 
     registered_handlers = []
@@ -813,15 +833,20 @@ def test_application_handler_registration():
         ]
         assert len(command_handlers) == 3
 
-        callbacks = {h.callback for h in command_handlers}
-        assert start in callbacks
-        assert help_command in callbacks
-        assert status in callbacks
+        mapping = {}
+        for h in command_handlers:
+            for cmd in h.commands:
+                mapping[cmd] = h.callback
+
+        assert mapping["start"] is start
+        assert mapping["help"] is help_command
+        assert mapping["status"] is status
 
         message_handlers = [
             h for h in registered_handlers if isinstance(h, MessageHandler)
         ]
         assert len(message_handlers) == 1
+        assert message_handlers[0].callback is handle_text
 
 
 def test_start_command_keyboard(fake_update, fake_context):
@@ -886,11 +911,13 @@ def test_send_failure_then_success_second_cycle(fake_application):
         return True
 
     send_count = [0]
+    second_send_kwargs = {}
 
     async def fake_send_message(*args, **kwargs):
         send_count[0] += 1
         if send_count[0] == 1:
             raise Exception("Telegram API error")
+        second_send_kwargs.update(kwargs)
         return MagicMock()
 
     fake_application.bot.send_message = fake_send_message
@@ -929,5 +956,7 @@ def test_send_failure_then_success_second_cycle(fake_application):
 
             assert send_count[0] >= 2
             assert len(mark_sent_calls) == 1
+            assert second_send_kwargs["parse_mode"] == "Markdown"
+            assert second_send_kwargs["disable_web_page_preview"] is True
         finally:
             bot.last_scrape_time = original_time
