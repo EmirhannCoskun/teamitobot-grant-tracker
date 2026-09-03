@@ -75,9 +75,10 @@ def _url_budget_chars(max_index: int) -> int:
     """
 
     max_index_digits = max(1, len(str(max_index)))
-    index_line = f"{'9' * max_index_digits}. *{'_' * GRANT_TITLE_MAX_LENGTH}*\n"
+    escaped_title = _escape_markdown("_" * GRANT_TITLE_MAX_LENGTH)
+    index_line = f"{'9' * max_index_digits}. *{escaped_title}*\n"
     link_line = "   🔗 [Başvuru Linki]()\n"
-    date_line = "   📅 01.01.2024 → 31.12.2024\n"
+    date_line = "   📅 01.01.2024 → 01.01.2024\n"
     trailing_blank = "\n"
     overhead = len(index_line) + len(link_line) + len(date_line) + len(trailing_blank)
     return TELEGRAM_MAX_MESSAGE_LENGTH - len(HEADER) - overhead
