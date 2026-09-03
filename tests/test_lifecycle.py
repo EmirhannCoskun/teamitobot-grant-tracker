@@ -274,13 +274,15 @@ def test_graceful_sigterm_after_registration_stops_in_order(monkeypatch):
     monkeypatch.setattr(bot, "start_health_server", lambda: None)
 
     def send_signal_once_polling_starts():
+        # Bu thread sinyali her durumda gönderir; polling zamanında başlamazsa
+        # bile main() sonsuza kadar stop_event.wait() içinde asılı kalmamalı.
         deadline = time.monotonic() + 5
         while time.monotonic() < deadline:
             app = fake_app_holder.get("app")
             if app is not None and app.updater.running:
-                signal.raise_signal(signal.SIGTERM)
-                return
+                break
             time.sleep(0.02)
+        signal.raise_signal(signal.SIGTERM)
 
     original_sigterm = signal.getsignal(signal.SIGTERM)
     original_sigint = signal.getsignal(signal.SIGINT)
