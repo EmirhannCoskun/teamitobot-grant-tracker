@@ -192,13 +192,19 @@ def test_health_server_returns_ok_response(monkeypatch):
     pytest.fail(f"Health server zamanında ayağa kalkmadı: {last_error}")
 
 
+@pytest.mark.skipif(
+    sys.platform.startswith("win"),
+    reason="os.kill self-signal Windows'ta sureci aninda sonlandiriyor",
+)
 def test_graceful_sigterm_after_registration_stops_in_order(monkeypatch):
     """Handler'lar kayıt olduktan sonra gelen SIGTERM, gerçek "graceful shutdown"
     yolunu (polling durdur -> scrape task iptal et -> app durdur) sırayla çalıştırmalı.
 
     Telegram/DB'ye gerçekten bağlanmadan bu yolu doğrulamak için Application ve
     init_db() burada fake'lenir; amaç bot.py'nin kendi main() akışını (ADR-007'de
-    tanımlanan kapanış sırasını) doğrulamaktır.
+    tanımlanan kapanış sırasını) doğrulamaktır. os.kill(getpid(), ...) kullanılır
+    çünkü bu, gerçek bir dış process'in gönderdiği sinyalle aynı teslimat yolunu
+    izler (raise_signal çağıran thread'i hedefler, ana thread'i değil).
     """
 
     import asyncio
@@ -282,7 +288,7 @@ def test_graceful_sigterm_after_registration_stops_in_order(monkeypatch):
             if app is not None and app.updater.running:
                 break
             time.sleep(0.02)
-        signal.raise_signal(signal.SIGTERM)
+        os.kill(os.getpid(), signal.SIGTERM)
 
     original_sigterm = signal.getsignal(signal.SIGTERM)
     original_sigint = signal.getsignal(signal.SIGINT)
