@@ -365,10 +365,13 @@ def test_sigterm_before_handlers_registered_is_abrupt(tmp_path):
     sys.platform.startswith("win"),
     reason="Sinyal semantikleri Windows'ta bu senaryoyu ayni sekilde test edilebilir kilmiyor",
 )
-def test_keyboard_interrupt_before_handlers_registered_is_reported(tmp_path):
-    """Bilinen davranış: SIGTERM'in aksine, handler kayıtlı olmadan önce gelen SIGINT
-    Python'ın varsayılan KeyboardInterrupt yolundan geçer ve dış except bloğu tarafından
-    yakalanıp raporlanır (asıl "graceful shutdown" yolundan değil).
+def test_keyboard_interrupt_before_handlers_registered_is_not_handled(tmp_path):
+    """Bilinen davranış: init_db() içindeki psycopg2 bağlantı denemesi engelleyici bir
+    C çağrısıdır ve bekleyen SIGINT'e (varsayılan KeyboardInterrupt yoluna bile)
+    işbirliği yapmaz; süreç ne "graceful shutdown" ne de "keyboard interrupt" mesajı
+    basmadan asılı kalır ve zorla sonlandırılmak zorunda kalır. Bu, SIGTERM'den daha
+    ciddi bir operasyonel bulgudur: init_db() donarsa hiçbir sinyal (SIGKILL hariç)
+    süreci güvenli şekilde durduramaz.
     """
 
     blackhole = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -404,7 +407,7 @@ def test_keyboard_interrupt_before_handlers_registered_is_reported(tmp_path):
             stdout, _ = process.communicate()
 
         assert "Starting graceful shutdown" not in stdout
-        assert "Bot stopped by keyboard interrupt" in stdout
-        assert process.returncode == 0
+        assert "Bot stopped by keyboard interrupt" not in stdout
+        assert process.returncode != 0
     finally:
         blackhole.close()
