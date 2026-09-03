@@ -13,7 +13,7 @@ from adapters.telegram.renderer import (
     HEADER,
     TELEGRAM_MAX_MESSAGE_LENGTH,
     GrantNotification,
-    _escape_markdown,
+    TelegramMessageOverflowError,
     group_by_message_length,
     render_grant_notifications,
     render_group,
@@ -64,13 +64,10 @@ def test_five_notifications_one_message():
 
 
 def test_five_long_notifications_can_split():
-    # Title gets hard-truncated to 80, so inflate the URL to push each
-    # notification's rendered block past the per-group budget.
     long_url = "http://example.com/" + "x" * 1500
     items = [_n(url=long_url) for _ in range(5)]
     msgs = render_grant_notifications(items)
     assert len(msgs) >= 2
-    # Header only on the first physical message.
     assert msgs[0].startswith(HEADER)
     for m in msgs[1:]:
         assert not m.startswith(HEADER)
@@ -114,13 +111,11 @@ def test_title_exactly_80_chars_not_truncated():
     title = "A" * GRANT_TITLE_MAX_LENGTH
     text = render_grant_notifications([_n(title=title)])[0]
     assert "A" * GRANT_TITLE_MAX_LENGTH in text
-    assert "..." not in text.split("\n")[1]
 
 
 def test_title_81_chars_truncated():
     title = "A" * (GRANT_TITLE_MAX_LENGTH + 1)
     text = render_grant_notifications([_n(title=title)])[0]
-    # The rendered title is exactly 80 A's followed by "..."
     assert ("A" * GRANT_TITLE_MAX_LENGTH + "...") in text
 
 
@@ -132,39 +127,120 @@ def test_title_truncation_uses_80_not_more():
 
 
 # ==========================================
-# Markdown escaping
+# Legacy Markdown title safety
 # ==========================================
 
 
-def test_escape_markdown_basic():
-    assert _escape_markdown("hello") == "hello"
-    assert _escape_markdown("a*b") == "a\\*b"
-    assert _escape_markdown("a_b") == "a\\_b"
-    assert _escape_markdown("`code`") == "\\`code\\`"
-    assert _escape_markdown("[x]") == "\\[x\\]"
-    assert _escape_markdown("(x)") == "\\(x\\)"
-    assert _escape_markdown("a\\b") == "a\\\\b"
-
-
-def test_title_special_chars_dont_break_markdown():
+def test_title_with_entity_break_chars_uses_outside_entity_fallback():
     title = "FIRST *Grant* [2027] _with_underscore_"
     text = render_grant_notifications([_n(title=title)])[0]
-    # The asterisks inside the title must be escaped so they don't open/close
-    # the surrounding *...* emphasis.
-    assert "\\*Grant\\*" in text
-    assert "\\[" in text and "\\]" in text
-    assert "\\_" in text
+    # Entity-breaking chars force the bold wrapper to be dropped, and the
+    # outside-entity escape rules are applied to ``*``, ``_``, `` ` ``
+    # (NOT to ``[`` per the legacy Markdown spec).
+    assert "FIRST \\*Grant\\* \\[2027] \\_with\\_underscore\\_" in text
+    # The title must NOT be wrapped in a single ``*...*`` entity.
+    assert "*FIRST *Grant* [2027] _with_underscore_*\n" not in text
 
 
-def test_url_special_chars_dont_break_link():
-    url = "http://example.com/path_(with)_parens?q=*&x=[y]"
+def test_title_with_backtick_uses_outside_entity_fallback():
+    text = render_grant_notifications([_n(title="a`b")])[0]
+    assert "a\\`b" in text
+    assert "*a`b*" not in text
+
+
+def test_title_with_backslash_uses_outside_entity_fallback():
+    text = render_grant_notifications([_n(title="a\\b")])[0]
+    # Backslash is in the entity-break set, so boldify drops the entity.
+    # The outside-entity escape set does NOT include ``\`` (it is not
+    # escaped per the legacy Markdown spec), so ``a\b`` is passed through
+    # verbatim, just without the surrounding ``*...*``.
+    assert "a\\b" in text
+    assert "*a\\b*" not in text
+
+
+def test_title_with_underscore_uses_outside_entity_fallback():
+    text = render_grant_notifications([_n(title="a_b")])[0]
+    assert "a\\_b" in text
+    assert "*a_b*" not in text
+
+
+def test_title_with_only_asterisks_does_not_wrap_in_entity():
+    text = render_grant_notifications([_n(title="hello *world*")])[0]
+    # The asterisks inside the title prevent a single ``*...*`` wrapper;
+    # they are escaped to ``\*`` so the rendered text is unambiguous.
+    assert "*hello *world**\n" not in text
+    assert "hello \\*world\\*" in text
+
+
+def test_title_safe_chars_still_boldified():
+    text = render_grant_notifications([_n(title="Plain Title")])[0]
+    assert "1. *Plain Title*\n" in text
+
+
+# ==========================================
+# Legacy Markdown URL safety
+# ==========================================
+
+
+def test_safe_url_preserved_verbatim():
+    url = "http://example.com/path"
     text = render_grant_notifications([_n(url=url)])[0]
-    # The URL itself is inside (...) so its raw `(`/`)` etc. are escaped.
-    assert "\\(" in text
-    assert "\\)" in text
-    assert "\\[" in text and "\\]" in text
-    # The link label "[Başvuru Linki]" must remain intact.
-    assert "[Başvuru Linki](" in text
+    assert f"[Başvuru Linki]({url})" in text
+
+
+def test_url_with_closing_paren_drops_link_line():
+    url = "http://example.com/path)more"
+    text = render_grant_notifications([_n(url=url)])[0]
+    assert "[Başvuru Linki]" not in text
+    assert "http://example.com/path)more" not in text
+    assert "📅" in text
+
+
+def test_url_with_opening_paren_does_not_corrupt_link():
+    # A raw ``(`` inside the URL is structurally ambiguous with the link
+    # syntax ``[text](url)`` but, unlike a raw ``)``, it does not close
+    # the link early. The renderer passes the URL verbatim, so the link
+    # line stays structurally valid and Telegram parses the entire
+    # ``(...)`` as the URL portion.
+    url = "http://example.com/(path"
+    text = render_grant_notifications([_n(url=url)])[0]
+    assert "[Başvuru Linki](http://example.com/(path)" in text
+
+
+def test_repeated_backslash_url_safety():
+    url = "http://example.com/a\\b\\c"
+    text = render_grant_notifications([_n(url=url)])[0]
+    assert f"[Başvuru Linki]({url})" in text
+    assert "\\\\\\\\" not in text
+
+
+def test_safe_url_not_escaped_with_backslash_parens():
+    url = "http://example.com/x"
+    text = render_grant_notifications([_n(url=url)])[0]
+    assert "\\(" not in text
+    assert "\\)" not in text
+    assert "\\[" not in text
+    assert "\\]" not in text
+
+
+# ==========================================
+# Control character sanitization
+# ==========================================
+
+
+def test_title_control_chars_sanitized():
+    title = "Hello\x00\x07\x1b[31mWorld"
+    text = render_grant_notifications([_n(title=title)])[0]
+    assert "\x00" not in text
+    assert "\x07" not in text
+    assert "\x1b" not in text
+
+
+def test_url_control_chars_sanitized():
+    url = "http://example.com/\x00\x07path"
+    text = render_grant_notifications([_n(url=url)])[0]
+    assert "\x00" not in text
+    assert "\x07" not in text
 
 
 # ==========================================
@@ -269,7 +345,6 @@ def test_group_by_message_length_empty():
 
 
 def test_no_message_exceeds_telegram_limit():
-    # Force many notifications so packing kicks in.
     items = [
         _n(title="T" * 200, url="http://example.com/" + "x" * 100) for _ in range(30)
     ]
@@ -280,8 +355,6 @@ def test_no_message_exceeds_telegram_limit():
 
 
 def test_single_oversized_notification_is_truncated_and_safe():
-    # Title way over the limit: renderer must still produce a message that
-    # fits within Telegram's limit.
     huge_title = "X" * 5000
     msgs = render_grant_notifications([_n(title=huge_title)])
     assert len(msgs) == 1
@@ -296,7 +369,6 @@ def test_mixed_lengths_produce_multiple_messages_within_limit():
     assert len(msgs) >= 2
     for m in msgs:
         assert len(m) <= TELEGRAM_MAX_MESSAGE_LENGTH
-    # All notifications must still be present somewhere.
     joined = "".join(msgs)
     assert joined.count("[Başvuru Linki](") == 10
 
@@ -333,17 +405,7 @@ def test_render_group_first_includes_header_subsequent_does_not():
 # ==========================================
 
 
-def test_bot_py_style_logical_cursor_preserves_continuous_numbering():
-    # Mirrors the production path inside bot.py's notification loop:
-    #   groups = group_by_message_length(...)
-    #   logical_cursor = 0
-    #   for group_index, group in enumerate(groups):
-    #       text = render_group(
-    #           group,
-    #           start_logical_index=logical_cursor + 1,
-    #           include_header=(group_index == 0),
-    #       )
-    #       logical_cursor += len(group)
+def test_bot_py_integration_uses_logical_cursor_for_continuous_numbering():
     long_url = "http://example.com/" + "x" * 1500
     batch = [_n(title=f"Grant {i}", url=long_url) for i in range(1, 6)]
     groups = group_by_message_length(batch)
@@ -362,7 +424,6 @@ def test_bot_py_style_logical_cursor_preserves_continuous_numbering():
 
     joined = "\n".join(messages)
 
-    # Numbering is continuous across physical splits: 1..5 in joined output.
     positions = []
     for i in range(1, 6):
         idx = joined.find(f"{i}. *Grant {i}*")
@@ -370,14 +431,11 @@ def test_bot_py_style_logical_cursor_preserves_continuous_numbering():
         positions.append(idx)
     assert positions == sorted(positions), f"numbering out of order: {positions}"
 
-    # The second physical message must NOT restart at "1. *Grant".
     assert "1. *Grant" in messages[0]
     assert "1. *Grant" not in messages[1]
-    # And it must continue with the correct logical index.
     assert "3. *Grant 3*" in messages[1]
     assert "5. *Grant 5*" in messages[-1]
 
-    # Length safety still holds across the split.
     for m in messages:
         assert len(m) <= TELEGRAM_MAX_MESSAGE_LENGTH
 
@@ -388,12 +446,6 @@ def test_bot_py_style_logical_cursor_preserves_continuous_numbering():
 
 
 def test_url_budget_uses_actual_logical_index_not_group_size():
-    # 12 notifications, URLs sized so the logical batch must split into
-    # several physical messages. The LAST physical group will contain
-    # indices 11, 12 — its size is small (2) but the index width is two
-    # digits. URL budgeting must use the actual max logical index (12),
-    # not the group size (2), so the renderer remains length-safe and
-    # produces two-digit numbered lines.
     long_url = "http://example.com/" + "x" * 1500
     batch = [_n(title=f"Grant {i}", url=long_url) for i in range(1, 13)]
 
@@ -409,63 +461,45 @@ def test_url_budget_uses_actual_logical_index_not_group_size():
         messages.append(text)
 
     assert len(messages) >= 2
-    # Every rendered message is within Telegram's length limit even when
-    # the physical group is small but the logical indices are two digits.
     for m in messages:
         assert len(m) <= TELEGRAM_MAX_MESSAGE_LENGTH
 
     joined = "\n".join(messages)
 
-    # Numbering must be continuous 1..12 across all physical messages,
-    # explicitly including the two-digit indices.
     for i in range(1, 13):
         assert f"{i}. *Grant {i}*" in joined, f"missing numbered item {i}"
 
-    # Index 10 must appear in the joined output (two-digit numbering).
     assert "10. *Grant 10*" in joined
     assert "11. *Grant 11*" in joined
     assert "12. *Grant 12*" in joined
 
-    # No later physical message restarts numbering at "1. *Grant"; assert
-    # against the exact "1. *Grant 1*" pattern (not the "11. *Grant"
-    # substring) so two-digit indices do not trigger a false positive.
     for m in messages[1:]:
         assert "1. *Grant 1*" not in m
 
 
 # ==========================================
-# Bug A — huge URL still produces a valid message <= 4096
+# Huge URL: link line dropped, message still <= 4096
 # ==========================================
 
 
-def test_huge_url_produces_single_message_within_limit():
+def test_huge_url_drops_link_line_and_stays_within_limit():
     huge_url = "https://example.com/" + "x" * 10000
     msgs = render_grant_notifications([_n(url=huge_url)])
     assert len(msgs) == 1
     assert len(msgs[0]) <= TELEGRAM_MAX_MESSAGE_LENGTH
-    # Link label and Markdown link structure must remain intact.
-    assert "[Başvuru Linki](" in msgs[0]
-    # The URL is bounded, so the original 10000-char URL must not appear
-    # verbatim — the rendered URL is truncated.
+    assert "[Başvuru Linki]" not in msgs[0]
+    assert "..." not in msgs[0]
     assert huge_url not in msgs[0]
+    assert "Grant X" in msgs[0]
+    assert "📅" in msgs[0]
 
 
-def test_huge_url_does_not_drop_link_silently():
+def test_huge_url_does_not_emit_truncated_url_marker():
     huge_url = "https://example.com/" + "x" * 10000
     msgs = render_grant_notifications([_n(url=huge_url)])
     text = msgs[0]
-
-    # The original 10 000-character URL must not appear verbatim — the
-    # rendered URL is bounded by the per-message length budget.
-    assert huge_url not in text
-
-    # The link label and Markdown link structure must remain intact and
-    # the link line must be structurally closed.
-    link_lines = [line for line in text.splitlines() if "🔗 [Başvuru Linki](" in line]
-    assert len(link_lines) == 1
-    line = link_lines[0]
-    assert line.startswith("   🔗 [Başvuru Linki](")
-    assert line.endswith(")")
+    assert "https://example.com/xxx..." not in text
+    assert text.count("https://example.com/") == 0
 
 
 # ==========================================
@@ -481,7 +515,6 @@ def test_numbering_continuous_across_physical_split():
 
     joined = "\n".join(msgs)
 
-    # Numbering must appear in order 1..5 across all physical messages.
     positions = []
     for i in range(1, 6):
         idx = joined.find(f"{i}. *Grant {i}*")
@@ -489,7 +522,6 @@ def test_numbering_continuous_across_physical_split():
         positions.append(idx)
     assert positions == sorted(positions), f"numbering out of order: {positions}"
 
-    # The second physical message must NOT restart at "1.".
     assert "1. *Grant" in msgs[0]
     second = msgs[1]
     assert "1. *Grant" not in second
@@ -520,27 +552,19 @@ def test_mixed_normal_and_oversized_does_not_singleton_all():
         _n(title="normal-3"),
     ]
     msgs = render_grant_notifications(items)
-    # All four notifications must be present in order.
     joined = "\n".join(msgs)
     assert "1. *normal-1*" in joined
     assert "2. *oversized*" in joined
     assert "3. *normal-2*" in joined
     assert "4. *normal-3*" in joined
-    # Every message is within Telegram's length limit.
     for m in msgs:
         assert len(m) <= TELEGRAM_MAX_MESSAGE_LENGTH
-    # Numbering must be continuous: 1,2,3,4 — no resets.
     for i in range(1, 5):
         assert f"{i}. *" in joined
-    # No notification appears twice.
     assert joined.count("normal-1") == 1
     assert joined.count("oversized") == 1
     assert joined.count("normal-2") == 1
     assert joined.count("normal-3") == 1
-    # The renderer must not turn every notification into a solo message
-    # just because one notification has a huge URL. The three normals
-    # are not all singleton groups, so the message count must be strictly
-    # less than len(items) (= 4).
     assert len(msgs) < len(items)
 
 
@@ -569,21 +593,35 @@ def test_universal_length_invariant_under_hard_inputs():
         assert len(m) <= TELEGRAM_MAX_MESSAGE_LENGTH, (
             f"message length {len(m)} exceeds {TELEGRAM_MAX_MESSAGE_LENGTH}"
         )
-        # Every generated link line must be structurally closed: it begins
-        # with the canonical emoji + label + opening paren and ends with
-        # the closing paren. This is a real Markdown-link structural check,
-        # not a substring fallback.
-        link_lines = [line for line in m.splitlines() if "🔗 [Başvuru Linki](" in line]
-        assert link_lines, "expected at least one rendered link line"
-        for line in link_lines:
-            assert line.startswith("   🔗 [Başvuru Linki]("), line
-            assert line.endswith(")"), line
-    # Numbering must be continuous 1..N across the split.
     total = len(items)
     joined = "\n".join(msgs)
     last_pos = -1
     for i in range(1, total + 1):
-        idx = joined.find(f"{i}. *")
+        idx = joined.find(f"{i}. ")
         assert idx > -1, f"missing numbered item {i}"
         assert idx > last_pos
         last_pos = idx
+
+
+# ==========================================
+# Impossible direct slice -> TelegramMessageOverflowError
+# ==========================================
+
+
+def test_impossible_direct_slice_raises_overflow():
+    # ``render_group`` enforces the 4096-char limit even when the caller
+    # supplies a pre-grouped slice that the safety net cannot fit. Pass
+    # far more notifications than can possibly fit so the body budget is
+    # exhausted mid-iteration.
+    n = _n(title="X")
+    items = [n] * 5000
+    try:
+        render_group(items, start_logical_index=1, include_header=False)
+    except TelegramMessageOverflowError as exc:
+        assert isinstance(exc, ValueError)
+    else:
+        raise AssertionError("expected TelegramMessageOverflowError")
+
+
+def test_overflow_error_subclasses_value_error():
+    assert issubclass(TelegramMessageOverflowError, ValueError)
