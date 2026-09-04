@@ -379,8 +379,8 @@ def test_partial_fan_out_failure_commits_grant_but_skips_remaining_users(
     legacy_database,
     monkeypatch,
 ):
-    from database import DB, Grant, Notification, User
     from bot import persist_new_grants_and_notifications
+    from database import DB, Grant, Notification, User
 
     first_chat_id = 111111
     second_chat_id = 222222
