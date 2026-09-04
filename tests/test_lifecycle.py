@@ -9,7 +9,6 @@ import subprocess
 import sys
 import threading
 import time
-import urllib.request
 
 import pytest
 
@@ -157,39 +156,39 @@ def test_health_server_survives_port_already_in_use(tmp_path):
     assert "HEALTH_SERVER_RETURNED_WITHOUT_CRASHING" in result.stdout
 
 
-def test_health_server_returns_ok_response(monkeypatch):
-    """Health server gerçekten dinlemeye başlayınca beklenen 200/OK yanıtını vermeli."""
+def test_health_server_returns_ok_response(tmp_path):
+    """Health server gerçekten dinlemeye başlayınca beklenen 200/OK yanıtını vermeli.
+
+    Subprocess'te çalıştırılır ki server/thread test suite'in geri kalanı boyunca
+    açık kalmasın; process bitince socket de OS tarafından geri alınır.
+    """
 
     free_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     free_socket.bind(("127.0.0.1", 0))
     port = free_socket.getsockname()[1]
     free_socket.close()
 
-    import config as config_module
+    script = (
+        "import threading, time, urllib.request\n"
+        "import bot\n"
+        "threading.Thread(target=bot.start_health_server, daemon=True).start()\n"
+        "deadline = time.monotonic() + 5\n"
+        "while time.monotonic() < deadline:\n"
+        "    try:\n"
+        f"        with urllib.request.urlopen('http://127.0.0.1:{port}/', timeout=1) as response:\n"
+        "            assert response.status == 200\n"
+        "            assert response.read() == b'OK'\n"
+        "            print('HEALTH_OK')\n"
+        "            raise SystemExit(0)\n"
+        "    except OSError:\n"
+        "        time.sleep(0.1)\n"
+        "raise SystemExit('HEALTH_SERVER_NEVER_READY')\n"
+    )
 
-    monkeypatch.setattr(config_module.config, "PORT", port)
+    result = run_python(["-c", script], make_env(PORT=str(port)), tmp_path)
 
-    import bot
-
-    thread = threading.Thread(target=bot.start_health_server, daemon=True)
-    thread.start()
-
-    deadline = time.monotonic() + 5
-    last_error = None
-
-    while time.monotonic() < deadline:
-        try:
-            with urllib.request.urlopen(
-                f"http://127.0.0.1:{port}/", timeout=1
-            ) as response:
-                assert response.status == 200
-                assert response.read() == b"OK"
-                return
-        except OSError as error:
-            last_error = error
-            time.sleep(0.1)
-
-    pytest.fail(f"Health server zamanında ayağa kalkmadı: {last_error}")
+    assert result.returncode == 0
+    assert "HEALTH_OK" in result.stdout
 
 
 @pytest.mark.skipif(
@@ -400,14 +399,19 @@ def test_keyboard_interrupt_before_handlers_registered_is_not_handled(tmp_path):
 
         process.send_signal(signal.SIGINT)
 
+        timed_out = False
         try:
             stdout, _ = process.communicate(timeout=5)
         except subprocess.TimeoutExpired:
+            timed_out = True
             process.kill()
             stdout, _ = process.communicate()
 
+        assert timed_out, (
+            "sureç SIGINT sonrasi bekleneni yapmadi: gercekten asilip kalmali"
+        )
+        assert process.returncode == -signal.SIGKILL
         assert "Starting graceful shutdown" not in stdout
         assert "Bot stopped by keyboard interrupt" not in stdout
-        assert process.returncode != 0
     finally:
         blackhole.close()
