@@ -3,6 +3,7 @@ Legacy persistence davranışlarını PostgreSQL üzerinde karakterize eden test
 """
 
 import pytest
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import sessionmaker
 
 from database import Base, Grant, Notification, User
@@ -164,6 +165,70 @@ def test_pending_notification_is_unique_per_user_and_grant(
     finally:
         session.close()
 
+def test_postgresql_enforces_notification_user_grant_unique_constraint(
+    legacy_database,
+):
+    first_session = legacy_database["session_factory"]()
+
+    try:
+        user = User(
+            chat_id=987654,
+            username="constraint_test_user",
+        )
+
+        grant = Grant(
+            title="Constraint Test Grant",
+            text="Constraint Test Grant",
+        )
+
+        first_session.add_all([user, grant])
+        first_session.commit()
+
+        first_notification = Notification(
+            user_id=user.id,
+            grant_id=grant.id,
+            sent_at=None,
+        )
+
+        first_session.add(first_notification)
+        first_session.commit()
+
+        user_id = user.id
+        grant_id = grant.id
+
+    finally:
+        first_session.close()
+
+    second_session = legacy_database["session_factory"]()
+
+    try:
+        duplicate_notification = Notification(
+            user_id=user_id,
+            grant_id=grant_id,
+            sent_at=None,
+        )
+
+        second_session.add(duplicate_notification)
+
+        with pytest.raises(IntegrityError):
+            second_session.commit()
+
+        second_session.rollback()
+
+        notifications = (
+            second_session.query(Notification)
+            .filter(
+                Notification.user_id == user_id,
+                Notification.grant_id == grant_id,
+            )
+            .all()
+        )
+
+        assert len(notifications) == 1
+
+    finally:
+        second_session.close()
+
 
 def test_notification_moves_from_pending_to_sent(
     legacy_database,
@@ -309,72 +374,133 @@ def test_increment_notifications_updates_stats(
         session.close()
 
 
-def test_partial_fan_out_failure_leaves_failed_notification_pending(
+def test_partial_fan_out_failure_commits_grant_but_skips_remaining_users(
     legacy_database,
+    monkeypatch,
 ):
-    from database import DB
+    from database import DB, Grant, Notification, User
+    from bot import persist_new_grants_and_notifications
 
-    successful_chat_id = 111111
-    failed_chat_id = 222222
-
-    # İki kullanıcı oluştur.
-    DB.add_or_get_user(
-        chat_id=successful_chat_id,
-        username="successful_user",
-    )
+    first_chat_id = 111111
+    second_chat_id = 222222
 
     DB.add_or_get_user(
-        chat_id=failed_chat_id,
-        username="failed_user",
+        chat_id=first_chat_id,
+        username="first_user",
     )
 
-    # İki kullanıcıyı da abone yap.
-    assert DB.subscribe_user(successful_chat_id) == "subscribed"
-    assert DB.subscribe_user(failed_chat_id) == "subscribed"
-
-    # Grant oluştur.
-    grant_id = DB.add_grant(
-        title="Partial Fan-out Grant",
+    DB.add_or_get_user(
+        chat_id=second_chat_id,
+        username="second_user",
     )
 
-    # Her kullanıcı için pending notification oluştur.
-    assert (
-        DB.create_pending_notification(
-            successful_chat_id,
+    assert DB.subscribe_user(first_chat_id) == "subscribed"
+    assert DB.subscribe_user(second_chat_id) == "subscribed"
+
+    original_create = DB.create_pending_notification
+    call_count = 0
+
+    def failing_create_pending_notification(chat_id, grant_id):
+        nonlocal call_count
+
+        call_count += 1
+
+        if call_count == 2:
+            raise RuntimeError("Simulated fan-out failure")
+
+        return original_create(
+            chat_id,
             grant_id,
         )
-        is True
+
+    monkeypatch.setattr(
+        DB,
+        "create_pending_notification",
+        failing_create_pending_notification,
     )
 
-    assert (
-        DB.create_pending_notification(
-            failed_chat_id,
-            grant_id,
+    new_grants = [
+        {
+            "title": "Partial Fan-out Failure Grant",
+            "start_date": None,
+            "end_date": None,
+            "url": None,
+        }
+    ]
+
+    # Gerçek production fan-out çalışıyor.
+    # İkinci recipient sırasında fault injection ile hata oluşuyor.
+    with pytest.raises(RuntimeError, match="Simulated fan-out failure"):
+        persist_new_grants_and_notifications(new_grants)
+
+    session = legacy_database["session_factory"]()
+
+    try:
+        # Grant, fan-out başlamadan önce DB.add_grant() tarafından
+        # commit edildiği için kalmaya devam eder.
+        grant = (
+            session.query(Grant)
+            .filter(
+                Grant.title == "Partial Fan-out Failure Grant"
+            )
+            .one()
         )
-        is True
-    )
 
-    pending_before = DB.get_pending_notifications()
+        # İlk kullanıcı notification aldı.
+        first_user = (
+            session.query(User)
+            .filter(User.chat_id == first_chat_id)
+            .one()
+        )
 
-    assert len(pending_before) == 2
+        notifications = (
+            session.query(Notification)
+            .filter(Notification.grant_id == grant.id)
+            .all()
+        )
 
-    # Başarılı kullanıcıyı bul ve sent olarak işaretle.
-    successful_notification = next(
-        notification
-        for notification in pending_before
-        if notification["chat_id"] == successful_chat_id
-    )
+        assert len(notifications) == 1
+        assert notifications[0].user_id == first_user.id
 
-    assert DB.mark_notification_sent(successful_notification["notification_id"]) is True
+    finally:
+        session.close()
 
-    # Başarısız kullanıcı için hiçbir işlem yapmıyoruz.
-    # Bu, send_message failure sonrası pending kalmasını temsil ediyor.
+    # İkinci scrape cycle'da grant artık biliniyor.
+    known_grants = {
+        (
+            grant.title,
+            grant.start_date,
+            grant.end_date,
+        )
+        for grant in DB.get_all_grants()
+        if grant.title
+    }
 
-    pending_after = DB.get_pending_notifications()
+    scraped_grant = {
+        "title": "Partial Fan-out Failure Grant",
+        "start_date": None,
+        "end_date": None,
+        "url": None,
+    }
 
-    assert len(pending_after) == 1
-    assert pending_after[0]["chat_id"] == failed_chat_id
-    assert pending_after[0]["grant_id"] == grant_id
+    new_grants_again = [
+        grant
+        for grant in [scraped_grant]
+        if (
+            grant["title"],
+            grant["start_date"],
+            grant["end_date"],
+        ) not in known_grants
+    ]
+
+    # Legacy bug: grant tekrar "new" sayılmadığı için
+    # eksik kalan kullanıcıya fan-out tekrar yapılmaz.
+    assert new_grants_again == []
+
+    pending = DB.get_pending_notifications()
+
+    assert len(pending) == 1
+    assert pending[0]["chat_id"] == first_chat_id
 
 
 def test_unsubscribed_user_notifications_are_not_returned_as_pending(
