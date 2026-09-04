@@ -165,6 +165,7 @@ def test_pending_notification_is_unique_per_user_and_grant(
     finally:
         session.close()
 
+
 def test_postgresql_enforces_notification_user_grant_unique_constraint(
     legacy_database,
 ):
@@ -440,23 +441,15 @@ def test_partial_fan_out_failure_commits_grant_but_skips_remaining_users(
         # commit edildiği için kalmaya devam eder.
         grant = (
             session.query(Grant)
-            .filter(
-                Grant.title == "Partial Fan-out Failure Grant"
-            )
+            .filter(Grant.title == "Partial Fan-out Failure Grant")
             .one()
         )
 
         # İlk kullanıcı notification aldı.
-        first_user = (
-            session.query(User)
-            .filter(User.chat_id == first_chat_id)
-            .one()
-        )
+        first_user = session.query(User).filter(User.chat_id == first_chat_id).one()
 
         notifications = (
-            session.query(Notification)
-            .filter(Notification.grant_id == grant.id)
-            .all()
+            session.query(Notification).filter(Notification.grant_id == grant.id).all()
         )
 
         assert len(notifications) == 1
@@ -490,7 +483,8 @@ def test_partial_fan_out_failure_commits_grant_but_skips_remaining_users(
             grant["title"],
             grant["start_date"],
             grant["end_date"],
-        ) not in known_grants
+        )
+        not in known_grants
     ]
 
     # Legacy bug: grant tekrar "new" sayılmadığı için
