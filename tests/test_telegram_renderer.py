@@ -135,8 +135,8 @@ def test_title_with_entity_break_chars_uses_outside_entity_fallback():
     title = "FIRST *Grant* [2027] _with_underscore_"
     text = render_grant_notifications([_n(title=title)])[0]
     # Entity-breaking chars force the bold wrapper to be dropped, and the
-    # outside-entity escape rules are applied to ``*``, ``_``, `` ` ``
-    # (NOT to ``[`` per the legacy Markdown spec).
+    # outside-entity escape rules are applied to ``*``, ``_``, `` ` ``,
+    # and ``[`` (all of which are now in the entity-break set).
     assert "FIRST \\*Grant\\* \\[2027] \\_with\\_underscore\\_" in text
     # The title must NOT be wrapped in a single ``*...*`` entity.
     assert "*FIRST *Grant* [2027] _with_underscore_*\n" not in text
@@ -175,6 +175,25 @@ def test_title_with_only_asterisks_does_not_wrap_in_entity():
 def test_title_safe_chars_still_boldified():
     text = render_grant_notifications([_n(title="Plain Title")])[0]
     assert "1. *Plain Title*\n" in text
+
+
+def test_link_shaped_title_cannot_create_nested_markdown_entity():
+    title = "[click](https://evil.example)"
+    text = render_grant_notifications([_n(title=title)])[0]
+    assert "*[click](https://evil.example)*" not in text
+    assert "\\[click](https://evil.example)" in text
+    assert "\x00" not in text
+    assert len(text) <= TELEGRAM_MAX_MESSAGE_LENGTH
+
+    title2 = "[test](https://example.com)"
+    text2 = render_grant_notifications([_n(title=title2)])[0]
+    assert "*[test](https://example.com)*" not in text2
+    assert "\\[test](https://example.com)" in text2
+
+    title3 = "[click](foo_bar)"
+    text3 = render_grant_notifications([_n(title=title3)])[0]
+    assert "*[click](foo_bar)*" not in text3
+    assert "\\[click](foo\\_bar)" in text3
 
 
 # ==========================================
@@ -239,8 +258,69 @@ def test_title_control_chars_sanitized():
 def test_url_control_chars_sanitized():
     url = "http://example.com/\x00\x07path"
     text = render_grant_notifications([_n(url=url)])[0]
+    assert "[Başvuru Linki]" not in text
+    assert url not in text
+    assert "http://example.com/path" not in text
+    assert "📅" in text
     assert "\x00" not in text
     assert "\x07" not in text
+    assert len(text) <= TELEGRAM_MAX_MESSAGE_LENGTH
+
+
+def test_url_with_newline_drops_link_line():
+    url = "https://example.com/a\nb"
+    text = render_grant_notifications([_n(url=url)])[0]
+    assert "[Başvuru Linki]" not in text
+    assert url not in text
+    assert "https://example.com/a b" not in text
+    assert "Grant X" in text
+    assert "📅" in text
+    assert len(text) <= TELEGRAM_MAX_MESSAGE_LENGTH
+    assert "..." not in text
+
+
+def test_url_with_carriage_return_drops_link_line():
+    url = "https://example.com/a\rb"
+    text = render_grant_notifications([_n(url=url)])[0]
+    assert "[Başvuru Linki]" not in text
+    assert url not in text
+    assert "https://example.com/a b" not in text
+    assert "Grant X" in text
+    assert "📅" in text
+    assert len(text) <= TELEGRAM_MAX_MESSAGE_LENGTH
+
+
+def test_url_with_tab_drops_link_line():
+    url = "https://example.com/a\tb"
+    text = render_grant_notifications([_n(url=url)])[0]
+    assert "[Başvuru Linki]" not in text
+    assert url not in text
+    assert "https://example.com/a b" not in text
+    assert "Grant X" in text
+    assert "📅" in text
+    assert len(text) <= TELEGRAM_MAX_MESSAGE_LENGTH
+
+
+def test_url_with_null_byte_drops_link_line():
+    url = "https://example.com/a\x00b"
+    text = render_grant_notifications([_n(url=url)])[0]
+    assert "[Başvuru Linki]" not in text
+    assert url not in text
+    assert "https://example.com/ab" not in text
+    assert "Grant X" in text
+    assert "📅" in text
+    assert len(text) <= TELEGRAM_MAX_MESSAGE_LENGTH
+
+
+def test_sanitized_empty_title_does_not_create_empty_bold_entity():
+    title = "\x00\x07\x1b"
+    text = render_grant_notifications([_n(title=title)])[0]
+    assert "**" not in text
+    assert "\x00" not in text
+    assert "\x07" not in text
+    assert "\x1b" not in text
+    assert "1." in text
+    assert len(text) <= TELEGRAM_MAX_MESSAGE_LENGTH
 
 
 # ==========================================

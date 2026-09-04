@@ -29,14 +29,14 @@ HEADER = "🚨 *FIRST SİTESİNDE YENİ HİBE BİLDİRİMİ!* 🚨\n\n"
 # straight into a legacy Markdown entity (``*...*``). Per the official
 # Telegram Bot API documentation for ``parse_mode="Markdown"``:
 # escaping inside entities is not allowed; the entity must be closed
-# first and reopened. ``[`` is the only exception: it is structural
-# only inside a link construct and is otherwise a literal character
-# outside any entity. The backslash is included because, while it is
-# the official outside-entity escape character, legacy Markdown treats
-# a raw ``\`` as a stray escape inside an entity and the parser will
-# consume the next character regardless of intent — making any dynamic
-# content containing ``\`` unsafe to wrap in a bold entity.
-_ENTITY_BREAK_CHARS = ("*", "_", "`", "\\")
+# first and reopened. ``[`` is structural inside a link construct and
+# would create a nested entity if passed inside a bold wrapper, so it
+# is included in the break set. The backslash is included because, while
+# it is the official outside-entity escape character, legacy Markdown
+# treats a raw ``\`` as a stray escape inside an entity and the parser
+# will consume the next character regardless of intent — making any
+# dynamic content containing ``\`` unsafe to wrap in a bold entity.
+_ENTITY_BREAK_CHARS = ("*", "_", "`", "\\", "[")
 
 # Characters that must be escaped when they appear as raw text OUTSIDE
 # any Markdown entity, per the official ``Markdown`` parse_mode spec.
@@ -96,6 +96,29 @@ class GrantNotification:
     end_date: datetime | None
 
 
+def _url_has_unsafe_control_or_whitespace(url: str) -> bool:
+    """Return ``True`` iff ``url`` contains forbidden control or whitespace.
+
+    Inspects the ORIGINAL provider URL before any normalization. If the
+    URL contains any character that would be unsafe in a Telegram legacy
+    Markdown link, the link line must be dropped entirely rather than
+    mutating the URL.
+
+    Rejected characters:
+
+    * All codepoints in ``_FORBIDDEN_CONTROL_CODEPOINTS`` (including
+      NUL, DEL, and most ASCII control characters).
+    * ``\\r``, ``\\n``, ``\\t`` — line-breaking / tab controls.
+    * ASCII space (``" "``) — whitespace is not valid inside a URL.
+    """
+
+    for ch in url:
+        cp = ord(ch)
+        if cp in _FORBIDDEN_CONTROL_CODEPOINTS or ch in ("\r", "\n", "\t", " "):
+            return True
+    return False
+
+
 def _sanitize(text: str) -> str:
     """Normalize unsafe control characters in dynamic content.
 
@@ -147,15 +170,20 @@ def _boldify_title(title: str) -> str:
 
     Per the official ``parse_mode="Markdown"`` rules:
 
+    * If ``title`` is empty after sanitization, return an empty string
+      so the notification remains visible via its numbering without
+      producing an empty bold entity (``**``).
     * If ``title`` contains no entity-breaking characters, wrap it in
       a single ``*...*`` bold entity.
-    * If ``title`` contains ``*``, ``_``, `` ` ``, or ``\\`` , the
-      entity cannot safely wrap the whole string. Drop the bold
+    * If ``title`` contains ``*``, ``_``, `` ` ``, ``\\`` , or ``[`` ,
+      the entity cannot safely wrap the whole string. Drop the bold
       wrapping and emit the title as plain (escaped) text instead so
       the dynamic characters cannot corrupt the entity or be silently
       mis-parsed.
     """
 
+    if not title:
+        return ""
     if any(ch in title for ch in _ENTITY_BREAK_CHARS):
         return _escape_outside_entity(title)
     return f"*{title}*"
@@ -192,18 +220,18 @@ def _url_is_safe_for_legacy_markdown_link(url: str) -> bool:
 def _escape_url_for_link(text: str) -> str:
     """Return ``text`` verbatim for use as the URL portion of a link.
 
-    Control characters are removed upstream by ``_sanitize``. The
-    legacy Markdown parser does not honor ``\\`` escapes inside the URL
+    The legacy Markdown parser does not honor ``\\`` escapes inside the URL
     portion of a ``[text](url)`` link, and adding random escaping would
     silently mutate user-supplied URLs (and potentially corrupt valid
     URLs containing ``\\`` characters). This helper exists so the
     contract is explicit and centralized: the URL is passed through
     unchanged.
 
-    The caller MUST additionally check ``_url_is_safe_for_legacy_markdown_link``
-    before emitting the link line; if the URL would break the link
-    syntax, the link is dropped entirely rather than being truncated or
-    mangled.
+    The caller MUST check ``_url_has_unsafe_control_or_whitespace`` and
+    ``_url_is_safe_for_legacy_markdown_link`` before emitting the link
+    line; if the URL would break the link syntax or contain unsafe
+    characters, the link is dropped entirely rather than being truncated
+    or mangled.
     """
 
     return text
@@ -212,11 +240,9 @@ def _escape_url_for_link(text: str) -> str:
 def _render_link_line(url: str | None) -> str:
     if not url:
         return ""
+    if _url_has_unsafe_control_or_whitespace(url):
+        return ""
     if not _url_is_safe_for_legacy_markdown_link(url):
-        # The URL contains characters that would break the
-        # ``[text](url)`` Markdown link syntax. Drop the link line
-        # entirely; never produce a broken hyperlink. The notification
-        # title and date are still emitted by the caller.
         return ""
     safe_url = _escape_url_for_link(url)
     return f"   🔗 [Başvuru Linki]({safe_url})\n"
@@ -234,8 +260,7 @@ def _render_notification_block(
 
     block = f"{logical_index}. {title_text}\n"
 
-    sanitized_url = _sanitize(notification.url) if notification.url else None
-    link_line = _render_link_line(sanitized_url)
+    link_line = _render_link_line(notification.url)
     if link_line:
         block += link_line
 
