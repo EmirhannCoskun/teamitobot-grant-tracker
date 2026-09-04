@@ -23,6 +23,12 @@ from database import init_db, DB
 from scraper import Scraper
 from smtp_notifier import build_smtp_notifier
 
+from adapters.telegram.renderer import (
+    GrantNotification,
+    group_by_message_length,
+    render_group,
+)
+
 import pytz
 from datetime import datetime
 
@@ -509,68 +515,73 @@ async def scrape_and_notify_loop(application):
                                 start_index:start_index + 5
                             ]
 
-                            message = (
-                                "🚨 *FIRST SİTESİNDE YENİ HİBE "
-                                "BİLDİRİMİ!* 🚨\n\n"
+                            grant_notifications = [
+                                GrantNotification(
+                                    title=notification["grant_title"],
+                                    url=notification["grant_url"],
+                                    start_date=notification["start_date"],
+                                    end_date=notification["end_date"],
+                                )
+                                for notification in batch
+                            ]
+
+                            groups = group_by_message_length(
+                                grant_notifications
                             )
 
-                            for index, notification in enumerate(batch, 1):
+                            batch_succeeded = True
 
-                                grant_title = notification["grant_title"]
+                            logical_cursor = 0
 
-                                if len(grant_title) > 80:
-                                    grant_title = grant_title[:80] + "..."
+                            for group_index, group in enumerate(groups):
 
-                                message += (
-                                    f"{index}. *{grant_title}*\n"
+                                text = render_group(
+                                    group,
+                                    start_logical_index=logical_cursor + 1,
+                                    include_header=(group_index == 0),
                                 )
 
-                                if notification["grant_url"]:
-                                    message += (
-                                        f"   🔗 [Başvuru Linki]"
-                                        f"({notification['grant_url']})\n"
+                                logical_cursor += len(group)
+
+                                start = sum(len(g) for g in groups[:group_index])
+                                covered_notifications = batch[
+                                    start:start + len(group)
+                                ]
+
+                                try:
+
+                                    await application.bot.send_message(
+                                        chat_id=chat_id,
+                                        text=text,
+                                        parse_mode="Markdown",
+                                        disable_web_page_preview=True,
                                     )
 
-                                if (
-                                    notification["start_date"]
-                                    and notification["end_date"]
-                                ):
-                                    message += (
-                                        f"   📅 "
-                                        f"{notification['start_date'].strftime('%d.%m.%Y')}"
-                                        f" → "
-                                        f"{notification['end_date'].strftime('%d.%m.%Y')}\n"
+                                    for notification in covered_notifications:
+
+                                        if DB.mark_notification_sent(
+                                            notification["notification_id"]
+                                        ):
+                                            DB.increment_notifications()
+
+                                    print(
+                                        f"✅ Sent {len(group)} notification(s) "
+                                        f"to user {chat_id}"
                                     )
 
-                                message += "\n"
+                                except Exception as e:
 
-                            try:
+                                    batch_succeeded = False
 
-                                await application.bot.send_message(
-                                    chat_id=chat_id,
-                                    text=message,
-                                    parse_mode="Markdown",
-                                    disable_web_page_preview=True,
-                                )
+                                    print(
+                                        f"❌ Error sending notification to "
+                                        f"{chat_id}: {e}"
+                                    )
 
-                                for notification in batch:
+                                    break
 
-                                    if DB.mark_notification_sent(
-                                        notification["notification_id"]
-                                    ):
-                                        DB.increment_notifications()
-
-                                print(
-                                    f"✅ Sent {len(batch)} notification(s) "
-                                    f"to user {chat_id}"
-                                )
-
-                            except Exception as e:
-
-                                print(
-                                    f"❌ Error sending notification to "
-                                    f"{chat_id}: {e}"
-                                )
+                            if not batch_succeeded:
+                                continue
 
                 # Email is an independent, best-effort fan-out. Running it after
                 # Telegram preserves the existing delivery path when SMTP fails.
