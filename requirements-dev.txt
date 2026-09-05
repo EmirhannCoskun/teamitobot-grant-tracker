@@ -2,5 +2,9 @@
 
 ruff==0.16.5
 pytest==9.1.1
+<<<<<<< HEAD
 
 psycopg[binary]==3.3.5
+=======
+pytest-timeout==2.4.0
+>>>>>>> origin/main
