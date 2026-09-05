@@ -67,6 +67,22 @@ def test_missing_database_url_exits_nonzero(tmp_path):
     assert "DATABASE_URL" in result.stderr
 
 
+def test_invalid_database_url_output_is_redacted(tmp_path):
+    database_secret = "database-secret-that-must-not-leak"
+    invalid_url = f"mysql://itobot:{database_secret}@db.invalid/grants"
+
+    result = run_python(
+        ["-c", "import config"],
+        make_env(DATABASE_URL=invalid_url),
+        tmp_path,
+    )
+
+    assert result.returncode != 0
+    assert "DATABASE_URL" in result.stderr
+    assert database_secret not in result.stderr
+    assert invalid_url not in result.stderr
+
+
 def test_invalid_check_interval_exits_nonzero(tmp_path):
     result = run_python(
         ["-c", "import config"], make_env(CHECK_INTERVAL="not-a-number"), tmp_path
@@ -83,30 +99,30 @@ def test_invalid_port_exits_nonzero(tmp_path):
     assert result.returncode != 0
 
 
-def test_negative_check_interval_is_currently_accepted_without_validation(tmp_path):
-    """Bilinen davranış: sayısal ama anlamsız (negatif) değerler doğrulanmıyor (bkz. ADR-006)."""
+def test_negative_check_interval_exits_nonzero(tmp_path):
+    """Typed settings pozitif olmayan tarama aralığını reddeder."""
 
     result = run_python(
-        ["-c", "import config; print(config.config.CHECK_INTERVAL)"],
+        ["-c", "import config"],
         make_env(CHECK_INTERVAL="-5"),
         tmp_path,
     )
 
-    assert result.returncode == 0
-    assert "-5" in result.stdout
+    assert result.returncode != 0
+    assert "CHECK_INTERVAL" in result.stderr
 
 
-def test_out_of_range_port_is_currently_accepted_without_validation(tmp_path):
-    """Bilinen davranış: 1-65535 aralığı dışındaki port değerleri doğrulanmıyor (bkz. ADR-006)."""
+def test_out_of_range_port_exits_nonzero(tmp_path):
+    """Typed settings geçersiz TCP portunu reddeder."""
 
     result = run_python(
-        ["-c", "import config; print(config.config.PORT)"],
+        ["-c", "import config"],
         make_env(PORT="99999"),
         tmp_path,
     )
 
-    assert result.returncode == 0
-    assert "99999" in result.stdout
+    assert result.returncode != 0
+    assert "PORT" in result.stderr
 
 
 def test_database_connection_failure_does_not_leak_credentials(tmp_path):
