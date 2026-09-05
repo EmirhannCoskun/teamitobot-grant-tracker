@@ -1,12 +1,21 @@
 """
-Web scraper for FIRST Robotics grant opportunities
+Compatibility scraper facade for FIRST Robotics grant opportunities.
+
+The FIRST provider adapter owns HTTP fetching and HTML parsing. This module
+preserves the legacy Scraper interface while the rest of the application is
+migrated to the new architecture.
 """
 
-import requests
-from bs4 import BeautifulSoup
 from datetime import datetime
+
 import pytz
 
+from adapters.first_web.client import FirstWebClient
+from adapters.first_web.errors import (
+    FirstWebRequestError,
+    FirstWebTimeoutError,
+)
+from adapters.first_web.parser import parse_grants
 from config import config
 
 
@@ -14,164 +23,61 @@ TURKEY_TZ = pytz.timezone("Europe/Istanbul")
 
 
 class Scraper:
-    """FIRST website scraper"""
-
-    HEADERS = {
-        "User-Agent": (
-            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-            "AppleWebKit/537.36 (KHTML, like Gecko) "
-            "Chrome/124.0.0.0 Safari/537.36"
-        )
-    }
+    """Compatibility facade for collecting active FIRST FRC grants."""
 
     @staticmethod
-    def scrape() -> list | None:
-        """Scrape currently active FRC grants from FIRST website."""
+    def scrape() -> list[dict] | None:
+        """Scrape currently active FRC grants using the new provider adapter."""
 
         try:
             print(f"🔍 Scraping {config.GRANT_URL}...")
 
-            response = requests.get(
+            client = FirstWebClient(
                 config.GRANT_URL,
-                headers=Scraper.HEADERS,
-                timeout=config.REQUEST_TIMEOUT
+                timeout=config.REQUEST_TIMEOUT,
             )
 
-            response.raise_for_status()
+            fetch_result = client.fetch()
+            candidates = parse_grants(fetch_result.html)
 
-            soup = BeautifulSoup(response.text, "html.parser")
+            print(
+                f"⏱️ FIRST provider latency: "
+                f"{fetch_result.latency_seconds:.3f}s"
+            )
 
-            grants = []
             today = datetime.now(TURKEY_TZ).date()
 
-            # Each grant is represented by a card-header containing
-            # the grant name, programs, dates and application link.
-            for card in soup.select(".card-header"):
+            active_candidates = [
+                candidate
+                for candidate in candidates
+                if candidate.window.start <= today <= candidate.window.end
+            ]
 
-                # ------------------------------------------
-                # 1. Grant name
-                # ------------------------------------------
-
-                name_element = card.select_one("h3.grant-name")
-
-                if not name_element:
-                    continue
-
-                name = " ".join(name_element.stripped_strings)
-
-                if not name:
-                    continue
-
-                # ------------------------------------------
-                # 2. Check whether grant is for FRC
-                # ------------------------------------------
-
-                frc_program = card.select_one(
-                    ".grant-programs .program-tag.frc"
-                )
-
-                if not frc_program:
-                    continue
-
-                # ------------------------------------------
-                # 3. Extract dates
-                # ------------------------------------------
-
-                date_items = card.select(".grant-dates .date-item")
-
-                start_date = None
-                end_date = None
-
-                for date_item in date_items:
-
-                    text = " ".join(date_item.stripped_strings)
-
-                    if text.startswith("Start:"):
-                        date_text = text.replace("Start:", "").strip()
-
-                        try:
-                            start_date = datetime.strptime(
-                                date_text,
-                                "%m/%d/%Y"
-                            ).date()
-                        except ValueError:
-                            pass
-
-                    elif text.startswith("End:"):
-                        date_text = text.replace("End:", "").strip()
-
-                        try:
-                            end_date = datetime.strptime(
-                                date_text,
-                                "%m/%d/%Y"
-                            ).date()
-                        except ValueError:
-                            pass
-
-                # If we can't determine the dates, don't include
-                # the grant. This prevents false positives.
-                if not start_date or not end_date:
-                    continue
-
-                # ------------------------------------------
-                # 4. Check whether grant is currently active
-                # ------------------------------------------
-
-                if not (start_date <= today <= end_date):
-                    continue
-
-                # ------------------------------------------
-                # 5. Extract application URL
-                # ------------------------------------------
-
-                grant_url = None
-
-                details_button = card.select_one(
-                    ".grant-details-toggle[aria-controls]"
-                )
-
-                if details_button:
-                    details_id = details_button.get("aria-controls")
-
-                    details = soup.select_one(
-                        f"#{details_id}"
-                    )
-
-                    if details:
-                        apply_link = details.select_one(
-                            "a.grant-apply-btn[href]"
-                    )
-
-                    if apply_link:
-                        grant_url = apply_link.get("href")
-
-                # Some grants may use a relative URL.
-                if grant_url and grant_url.startswith("/"):
-                    grant_url = f"https://www.firstinspires.org{grant_url}"
-
-                # ------------------------------------------
-                # 6. Avoid duplicate grants within one scrape
-                # ------------------------------------------
-
-                grant = {
-                    "title": name,
-                    "start_date": start_date,
-                    "end_date": end_date,
-                    "url": grant_url,
+            grants = [
+                {
+                    "title": candidate.title,
+                    "start_date": candidate.window.start,
+                    "end_date": candidate.window.end,
+                    "url": candidate.application_url,
                 }
+                for candidate in active_candidates
+            ]
 
-                if not any(
-                    existing["title"] == name
-                    and existing["start_date"] == start_date
-                    and existing["end_date"] == end_date
-                    for existing in grants
-                ):
-                    grants.append(grant)
-
-            print(f"📅 Today: {today.strftime('%Y-%m-%d')}")
-            print(f"✅ Scraped {len(grants)} active FRC grants")
+            unique_grants = []
 
             for grant in grants:
+                if not any(
+                    existing["title"] == grant["title"]
+                    and existing["start_date"] == grant["start_date"]
+                    and existing["end_date"] == grant["end_date"]
+                    for existing in unique_grants
+                ):
+                    unique_grants.append(grant)
+
+            print(f"📅 Today: {today.strftime('%Y-%m-%d')}")
+            print(f"✅ Scraped {len(unique_grants)} active FRC grants")
+
+            for grant in unique_grants:
                 print(
                     f"   • {grant['title']} "
                     f"({grant['start_date']} → {grant['end_date']})"
@@ -180,16 +86,16 @@ class Scraper:
                 if grant["url"]:
                     print(f"     🔗 {grant['url']}")
 
-            return grants
+            return unique_grants
 
-        except requests.exceptions.Timeout:
+        except FirstWebTimeoutError:
             print("❌ Scraper timeout")
             return None
 
-        except requests.exceptions.RequestException as e:
-            print(f"❌ Request error: {e}")
+        except FirstWebRequestError as error:
+            print(f"❌ Request error: {error}")
             return None
 
-        except Exception as e:
-            print(f"❌ Scraper error: {e}")
+        except Exception as error:
+            print(f"❌ Scraper error: {error}")
             return None
