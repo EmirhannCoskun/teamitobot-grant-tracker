@@ -38,6 +38,35 @@ TURKEY_TZ = pytz.timezone("Europe/Istanbul")
 last_scrape_time = time.time()
 smtp_notifier = build_smtp_notifier(config)
 
+def persist_new_grants_and_notifications(new_grants):
+    """
+    Persist newly discovered grants and fan out notification intents
+    to the current subscribed-user snapshot.
+
+    Each DB operation commits independently. This intentionally preserves
+    the legacy behavior where a fan-out failure can leave a grant committed
+    while some recipients never receive notification intents.
+    """
+
+    if not new_grants:
+        return
+
+    subscribed_users = DB.get_subscribed_users()
+
+    for grant in new_grants:
+        grant_id = DB.add_grant(
+            title=grant["title"],
+            start_date=grant["start_date"],
+            end_date=grant["end_date"],
+            url=grant["url"],
+        )
+
+        for chat_id in subscribed_users:
+            DB.create_pending_notification(
+                chat_id,
+                grant_id,
+            )
+
 
 async def send_grant_email_best_effort(grant):
     """Send optional email without affecting the Telegram delivery path."""
@@ -460,23 +489,7 @@ async def scrape_and_notify_loop(application):
                             f"🚨 Found {len(new_grants)} new grants!"
                         )
 
-                        subscribed_users = DB.get_subscribed_users()
-
-                        for grant in new_grants:
-
-                            grant_id = DB.add_grant(
-                                title=grant["title"],
-                                start_date=grant["start_date"],
-                                end_date=grant["end_date"],
-                                url=grant["url"]
-                            )
-
-                            for chat_id in subscribed_users:
-
-                                DB.create_pending_notification(
-                                    chat_id,
-                                    grant_id
-                                )
+                        persist_new_grants_and_notifications(new_grants)
 
                     else:
 
