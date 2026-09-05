@@ -87,11 +87,7 @@ def test_postgresql_enforces_user_chat_id_unique_constraint(
 
         second_session.rollback()
 
-        users = (
-            second_session.query(User)
-            .filter(User.chat_id == 123456)
-            .all()
-        )
+        users = second_session.query(User).filter(User.chat_id == 123456).all()
 
         assert len(users) == 1
         assert users[0].username == "first_user"
@@ -466,9 +462,7 @@ def test_partial_fan_out_failure_commits_grant_but_skips_remaining_users(
         )
 
         notifications = (
-            session.query(Notification)
-            .filter(Notification.grant_id == grant.id)
-            .all()
+            session.query(Notification).filter(Notification.grant_id == grant.id).all()
         )
 
         assert len(notifications) == 1
@@ -531,10 +525,7 @@ def test_partial_fan_out_failure_commits_grant_but_skips_remaining_users(
 
     assert len(pending) == 1
 
-    pending_chat_ids = {
-        notification["chat_id"]
-        for notification in pending
-    }
+    pending_chat_ids = {notification["chat_id"] for notification in pending}
 
     expected_chat_ids = {
         first_chat_id,
