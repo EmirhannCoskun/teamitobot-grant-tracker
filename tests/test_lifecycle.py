@@ -341,6 +341,7 @@ def test_sigterm_before_handlers_registered_is_abrupt(tmp_path):
     blackhole = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     blackhole.bind(("127.0.0.1", 0))
     blackhole.listen(1)
+    blackhole.settimeout(10)
     blackhole_port = blackhole.getsockname()[1]
 
     env = make_env(
@@ -358,8 +359,11 @@ def test_sigterm_before_handlers_registered_is_abrupt(tmp_path):
         errors="replace",
     )
 
+    blocked_connection = None
     try:
-        time.sleep(0.5)
+        # Wait for psycopg2 to enter the blocking connection call. A fixed sleep
+        # races with import speed across developer machines and CI runners.
+        blocked_connection, _ = blackhole.accept()
         assert process.poll() is None, "sinyal gönderilmeden önce süreç zaten sonlanmış"
 
         process.send_signal(signal.SIGTERM)
@@ -373,6 +377,11 @@ def test_sigterm_before_handlers_registered_is_abrupt(tmp_path):
         assert "Starting graceful shutdown" not in stdout
         assert process.returncode == -signal.SIGTERM
     finally:
+        if process.poll() is None:
+            process.kill()
+            process.communicate(timeout=5)
+        if blocked_connection is not None:
+            blocked_connection.close()
         blackhole.close()
 
 
@@ -392,6 +401,7 @@ def test_keyboard_interrupt_before_handlers_registered_is_not_handled(tmp_path):
     blackhole = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     blackhole.bind(("127.0.0.1", 0))
     blackhole.listen(1)
+    blackhole.settimeout(10)
     blackhole_port = blackhole.getsockname()[1]
 
     env = make_env(
@@ -409,8 +419,11 @@ def test_keyboard_interrupt_before_handlers_registered_is_not_handled(tmp_path):
         errors="replace",
     )
 
+    blocked_connection = None
     try:
-        time.sleep(0.5)
+        # Synchronize on the actual blocked DB call; import duration is not a
+        # lifecycle state and varies significantly between clean CI and local.
+        blocked_connection, _ = blackhole.accept()
         assert process.poll() is None, "sinyal gönderilmeden önce süreç zaten sonlanmış"
 
         process.send_signal(signal.SIGINT)
@@ -430,4 +443,9 @@ def test_keyboard_interrupt_before_handlers_registered_is_not_handled(tmp_path):
         assert "Starting graceful shutdown" not in stdout
         assert "Bot stopped by keyboard interrupt" not in stdout
     finally:
+        if process.poll() is None:
+            process.kill()
+            process.communicate(timeout=5)
+        if blocked_connection is not None:
+            blocked_connection.close()
         blackhole.close()
