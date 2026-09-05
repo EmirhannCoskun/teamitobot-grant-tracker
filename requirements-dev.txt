@@ -2,3 +2,5 @@
 
 ruff==0.16.5
 pytest==9.1.1
+
+psycopg[binary]==3.3.5

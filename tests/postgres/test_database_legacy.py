@@ -55,29 +55,49 @@ def test_database_fixture_isolated(legacy_database):
         session.close()
 
 
-def test_add_or_get_user_keeps_chat_id_unique(legacy_database):
-    from database import DB
-
-    DB.add_or_get_user(
-        chat_id=123456,
-        username="first_user",
-    )
-
-    DB.add_or_get_user(
-        chat_id=123456,
-        username="different_username",
-    )
-
-    session = legacy_database["session_factory"]()
+def test_postgresql_enforces_user_chat_id_unique_constraint(
+    legacy_database,
+):
+    first_session = legacy_database["session_factory"]()
 
     try:
-        users = session.query(User).filter(User.chat_id == 123456).all()
+        first_user = User(
+            chat_id=123456,
+            username="first_user",
+        )
+
+        first_session.add(first_user)
+        first_session.commit()
+
+    finally:
+        first_session.close()
+
+    second_session = legacy_database["session_factory"]()
+
+    try:
+        duplicate_user = User(
+            chat_id=123456,
+            username="duplicate_user",
+        )
+
+        second_session.add(duplicate_user)
+
+        with pytest.raises(IntegrityError):
+            second_session.commit()
+
+        second_session.rollback()
+
+        users = (
+            second_session.query(User)
+            .filter(User.chat_id == 123456)
+            .all()
+        )
 
         assert len(users) == 1
         assert users[0].username == "first_user"
 
     finally:
-        session.close()
+        second_session.close()
 
 
 def test_add_grant_same_title_overwrites_existing_grant(legacy_database):
@@ -445,15 +465,31 @@ def test_partial_fan_out_failure_commits_grant_but_skips_remaining_users(
             .one()
         )
 
-        # İlk kullanıcı notification aldı.
-        first_user = session.query(User).filter(User.chat_id == first_chat_id).one()
-
         notifications = (
-            session.query(Notification).filter(Notification.grant_id == grant.id).all()
+            session.query(Notification)
+            .filter(Notification.grant_id == grant.id)
+            .all()
         )
 
         assert len(notifications) == 1
-        assert notifications[0].user_id == first_user.id
+
+        notified_chat_ids = {
+            user.chat_id
+            for user in (
+                session.query(User)
+                .join(Notification, Notification.user_id == User.id)
+                .filter(Notification.grant_id == grant.id)
+                .all()
+            )
+        }
+
+        expected_chat_ids = {
+            first_chat_id,
+            second_chat_id,
+        }
+
+        assert len(notified_chat_ids) == 1
+        assert notified_chat_ids < expected_chat_ids
 
     finally:
         session.close()
@@ -494,7 +530,19 @@ def test_partial_fan_out_failure_commits_grant_but_skips_remaining_users(
     pending = DB.get_pending_notifications()
 
     assert len(pending) == 1
-    assert pending[0]["chat_id"] == first_chat_id
+
+    pending_chat_ids = {
+        notification["chat_id"]
+        for notification in pending
+    }
+
+    expected_chat_ids = {
+        first_chat_id,
+        second_chat_id,
+    }
+
+    assert len(pending_chat_ids) == 1
+    assert pending_chat_ids < expected_chat_ids
 
 
 def test_unsubscribed_user_notifications_are_not_returned_as_pending(
