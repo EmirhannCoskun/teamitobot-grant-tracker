@@ -129,6 +129,34 @@ Ayrıca aynı kullanıcı için aynı hibe hakkında birden fazla bildirim oluş
 
 Bundan sonra yeni FRC hibe fırsatları bulunduğunda Telegram üzerinden bildirim alırsınız.
 
+### Canonical runtime configuration
+
+Uygulama ayarları tek bir immutable settings nesnesi olarak startup sırasında
+oluşturulur. Kaynak önceliği `process environment > local .env > varsayılanlar`
+şeklindedir. `.env` yalnız `development` modunda okunur; `test`, `staging` ve
+`production` secret ve ayarları explicit process/deployment environment'ından
+alınır. Güncel local şablon [`.env.example`](.env.example) dosyasıdır.
+
+| Değişken | Sözleşme / varsayılan |
+| --- | --- |
+| `TELEGRAM_BOT_TOKEN` | Zorunlu secret |
+| `DATABASE_URL` | Zorunlu PostgreSQL URL'si; secret olarak saklanır |
+| `ENVIRONMENT` | `development`, `test`, `staging`, `production`; varsayılan `development` |
+| `RELEASE_ID` | 1–128 karakterli release/build kimliği; varsayılan `local` |
+| `CHECK_INTERVAL` | `1..86400` saniye; varsayılan `900` |
+| `PORT` | `1..65535`; test modunda `0` da kabul edilir; varsayılan `8080` |
+| `LOG_LEVEL` | `DEBUG`, `INFO`, `WARNING`, `ERROR`, `CRITICAL`; varsayılan `INFO` |
+| `GRANT_URL` | Absolute HTTP(S) provider adresi |
+| `PROVIDER_TIMEOUT`, `TELEGRAM_TIMEOUT`, `DATABASE_TIMEOUT` | `0.1..300` saniye |
+| `POLLING_BACKLOG_POLICY` | `process` veya `discard`; varsayılan `process` |
+| `OUTBOX_MAX_ATTEMPTS` | `1..100`; varsayılan `5` |
+| `OUTBOX_BASE_BACKOFF`, `OUTBOX_MAX_BACKOFF` | Pozitif retry aralıkları; max değeri base'den küçük olamaz |
+| `OUTBOX_LEASE_SECONDS` | `1..86400`; Telegram timeout'undan büyük olmalıdır |
+
+Eksik veya geçersiz yapılandırma, herhangi bir secret değerini stdout/stderr'a
+yazmadan değişken adını raporlar ve process'i kaynaklar başlatılmadan non-zero
+exit ile durdurur.
+
 ### SMTP operasyon konfigürasyonu
 
 v0.2.0 — Operational Grant Notifications sürümünde SMTP kanalı opsiyoneldir ve

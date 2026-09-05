@@ -67,6 +67,22 @@ def test_missing_database_url_exits_nonzero(tmp_path):
     assert "DATABASE_URL" in result.stderr
 
 
+def test_invalid_database_url_output_is_redacted(tmp_path):
+    database_secret = "database-secret-that-must-not-leak"
+    invalid_url = f"mysql://itobot:{database_secret}@db.invalid/grants"
+
+    result = run_python(
+        ["-c", "import config"],
+        make_env(DATABASE_URL=invalid_url),
+        tmp_path,
+    )
+
+    assert result.returncode != 0
+    assert "DATABASE_URL" in result.stderr
+    assert database_secret not in result.stderr
+    assert invalid_url not in result.stderr
+
+
 def test_invalid_check_interval_exits_nonzero(tmp_path):
     result = run_python(
         ["-c", "import config"], make_env(CHECK_INTERVAL="not-a-number"), tmp_path
@@ -83,30 +99,30 @@ def test_invalid_port_exits_nonzero(tmp_path):
     assert result.returncode != 0
 
 
-def test_negative_check_interval_is_currently_accepted_without_validation(tmp_path):
-    """Bilinen davranış: sayısal ama anlamsız (negatif) değerler doğrulanmıyor (bkz. ADR-006)."""
+def test_negative_check_interval_exits_nonzero(tmp_path):
+    """Typed settings pozitif olmayan tarama aralığını reddeder."""
 
     result = run_python(
-        ["-c", "import config; print(config.config.CHECK_INTERVAL)"],
+        ["-c", "import config"],
         make_env(CHECK_INTERVAL="-5"),
         tmp_path,
     )
 
-    assert result.returncode == 0
-    assert "-5" in result.stdout
+    assert result.returncode != 0
+    assert "CHECK_INTERVAL" in result.stderr
 
 
-def test_out_of_range_port_is_currently_accepted_without_validation(tmp_path):
-    """Bilinen davranış: 1-65535 aralığı dışındaki port değerleri doğrulanmıyor (bkz. ADR-006)."""
+def test_out_of_range_port_exits_nonzero(tmp_path):
+    """Typed settings geçersiz TCP portunu reddeder."""
 
     result = run_python(
-        ["-c", "import config; print(config.config.PORT)"],
+        ["-c", "import config"],
         make_env(PORT="99999"),
         tmp_path,
     )
 
-    assert result.returncode == 0
-    assert "99999" in result.stdout
+    assert result.returncode != 0
+    assert "PORT" in result.stderr
 
 
 def test_database_connection_failure_does_not_leak_credentials(tmp_path):
@@ -325,6 +341,7 @@ def test_sigterm_before_handlers_registered_is_abrupt(tmp_path):
     blackhole = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     blackhole.bind(("127.0.0.1", 0))
     blackhole.listen(1)
+    blackhole.settimeout(10)
     blackhole_port = blackhole.getsockname()[1]
 
     env = make_env(
@@ -342,8 +359,11 @@ def test_sigterm_before_handlers_registered_is_abrupt(tmp_path):
         errors="replace",
     )
 
+    blocked_connection = None
     try:
-        time.sleep(0.5)
+        # Wait for psycopg2 to enter the blocking connection call. A fixed sleep
+        # races with import speed across developer machines and CI runners.
+        blocked_connection, _ = blackhole.accept()
         assert process.poll() is None, "sinyal gönderilmeden önce süreç zaten sonlanmış"
 
         process.send_signal(signal.SIGTERM)
@@ -357,6 +377,11 @@ def test_sigterm_before_handlers_registered_is_abrupt(tmp_path):
         assert "Starting graceful shutdown" not in stdout
         assert process.returncode == -signal.SIGTERM
     finally:
+        if process.poll() is None:
+            process.kill()
+            process.communicate(timeout=5)
+        if blocked_connection is not None:
+            blocked_connection.close()
         blackhole.close()
 
 
@@ -376,6 +401,7 @@ def test_keyboard_interrupt_before_handlers_registered_is_not_handled(tmp_path):
     blackhole = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     blackhole.bind(("127.0.0.1", 0))
     blackhole.listen(1)
+    blackhole.settimeout(10)
     blackhole_port = blackhole.getsockname()[1]
 
     env = make_env(
@@ -393,8 +419,11 @@ def test_keyboard_interrupt_before_handlers_registered_is_not_handled(tmp_path):
         errors="replace",
     )
 
+    blocked_connection = None
     try:
-        time.sleep(0.5)
+        # Synchronize on the actual blocked DB call; import duration is not a
+        # lifecycle state and varies significantly between clean CI and local.
+        blocked_connection, _ = blackhole.accept()
         assert process.poll() is None, "sinyal gönderilmeden önce süreç zaten sonlanmış"
 
         process.send_signal(signal.SIGINT)
@@ -414,4 +443,9 @@ def test_keyboard_interrupt_before_handlers_registered_is_not_handled(tmp_path):
         assert "Starting graceful shutdown" not in stdout
         assert "Bot stopped by keyboard interrupt" not in stdout
     finally:
+        if process.poll() is None:
+            process.kill()
+            process.communicate(timeout=5)
+        if blocked_connection is not None:
+            blocked_connection.close()
         blackhole.close()
