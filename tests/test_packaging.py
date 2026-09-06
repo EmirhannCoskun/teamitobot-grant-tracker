@@ -3,11 +3,10 @@ Paket metadata, build ve import davranışını doğrulayan testler
 """
 
 import os
-import site
 import subprocess
 import sys
-import tempfile
 import tomllib
+import venv
 from pathlib import Path
 from zipfile import ZipFile
 
@@ -25,10 +24,30 @@ EXPECTED_MODULES = (
     "adapters/__init__.py",
 )
 
+CLEAN_INSTALL_TIMEOUT = 240
+
+
+def _venv_python(venv_dir):
+    venv.create(venv_dir, with_pip=True)
+    if sys.platform.startswith("win"):
+        return venv_dir / "Scripts" / "python.exe"
+    return venv_dir / "bin" / "python"
+
+
+def _pip_list(python):
+    result = subprocess.run(
+        [str(python), "-m", "pip", "list", "--format=freeze"],
+        check=True,
+        capture_output=True,
+        text=True,
+        timeout=30,
+    )
+    return result.stdout.lower()
+
 
 def test_dependency_groups_are_separated():
-    """pyproject.toml'da runtime bağımlılıkları test/lint araçlarını içermemeli,
-    dev extra'sı içermeli."""
+    """pyproject.toml'da runtime bağımlılıkları test/lint araçlarını içermemeli;
+    test/lint araçları da kendi aralarında ayrı gruplarda olmalı."""
 
     with open(REPO_ROOT / "pyproject.toml", "rb") as handle:
         data = tomllib.load(handle)
@@ -36,15 +55,36 @@ def test_dependency_groups_are_separated():
     runtime_deps = {
         dep.split("==")[0].lower() for dep in data["project"]["dependencies"]
     }
-    dev_deps = {
-        dep.split("==")[0].lower()
-        for dep in data["project"]["optional-dependencies"]["dev"]
-    }
+    extras = data["project"]["optional-dependencies"]
+    test_deps = {dep.split("==")[0].lower() for dep in extras["test"]}
+    dev_deps = {dep.split("==")[0].lower().split("[")[0] for dep in extras["dev"]}
 
     assert "pytest" not in runtime_deps
     assert "ruff" not in runtime_deps
-    assert "pytest" in dev_deps
+    assert "pytest" in test_deps
+    assert "ruff" not in test_deps
     assert "ruff" in dev_deps
+
+
+def test_lock_file_pins_every_runtime_dependency_at_declared_version():
+    """requirements.lock, pyproject.toml'daki her runtime bağımlılığını aynı
+    sabit sürümle içermeli (üretim akışının tek doğrulanmış kaynağı olmalı)."""
+
+    with open(REPO_ROOT / "pyproject.toml", "rb") as handle:
+        declared = dict(
+            dep.split("==") for dep in tomllib.load(handle)["project"]["dependencies"]
+        )
+
+    lock_versions = {}
+    for line in (REPO_ROOT / "requirements.lock").read_text().splitlines():
+        line = line.strip()
+        if not line or line.startswith("#"):
+            continue
+        name, version = line.split("==")
+        lock_versions[name.lower()] = version
+
+    for name, version in declared.items():
+        assert lock_versions.get(name.lower()) == version, name
 
 
 def test_wheel_build_contains_expected_modules_only(tmp_path):
@@ -72,49 +112,100 @@ def test_wheel_build_contains_expected_modules_only(tmp_path):
     assert not any("pytest" in name or "ruff" in name for name in names)
 
 
-@pytest.mark.timeout(120)
-def test_runtime_import_smoke():
-    """Build edilip kurulan paket, gerçek bağımlılıklarla birlikte import edilebilmeli.
+def test_wheel_build_is_reproducible(tmp_path):
+    """Aynı kaynaktan iki kez build edilen wheel, dosya içerikleri bakımından
+    birebir aynı olmalı (build-path/zaman damgası kaynaklı sapma olmamalı)."""
 
-    Kurulum --no-deps ile yapılır (hızlı, ağ gerektirmez); import sırasında
-    gereken üçüncü parti kütüphaneler bu test ortamında zaten kurulu olanlardan
-    (dev venv) çözülür. Global 30s limitten daha yüksek bir timeout kullanılır
-    çünkü disk/antivirus yüküne bağlı olarak kurulum adımı yavaşlayabiliyor.
-    """
+    build_env = {**os.environ, "SOURCE_DATE_EPOCH": "1700000000"}
+    hashes = []
 
-    with tempfile.TemporaryDirectory() as tmp_dir:
+    for attempt in ("first", "second"):
+        out_dir = tmp_path / attempt
+        out_dir.mkdir()
         subprocess.run(
             [
                 sys.executable,
                 "-m",
                 "pip",
-                "install",
+                "wheel",
                 "--no-deps",
-                "--target",
-                tmp_dir,
+                "-w",
+                str(out_dir),
                 ".",
             ],
             cwd=REPO_ROOT,
+            env=build_env,
             check=True,
             capture_output=True,
             text=True,
             timeout=60,
         )
+        wheel = next(out_dir.glob("*.whl"))
+        with ZipFile(wheel) as archive:
+            content_hashes = {
+                info.filename: archive.read(info.filename)
+                for info in archive.infolist()
+                if not info.filename.endswith("RECORD")
+            }
+        hashes.append(content_hashes)
 
-        env = {
-            **os.environ,
-            "PYTHONPATH": os.pathsep.join([tmp_dir, *site.getsitepackages()]),
-            "TELEGRAM_BOT_TOKEN": "dummy-token",
-            "DATABASE_URL": "postgresql://user:pass@127.0.0.1:1/itobot_test",
-        }
+    assert hashes[0] == hashes[1]
 
-        result = subprocess.run(
-            [sys.executable, "-c", "import bot; print('IMPORT_OK')"],
-            env=env,
-            capture_output=True,
-            text=True,
-            timeout=30,
-        )
+
+@pytest.mark.timeout(CLEAN_INSTALL_TIMEOUT)
+def test_clean_runtime_install_excludes_dev_tools_and_imports(tmp_path):
+    """Sıfırdan bir venv'e sadece runtime bağımlılıklarıyla kurulum yapılmalı;
+    pytest/ruff kesinlikle bulunmamalı ve kurulan paket gerçekten import
+    edilebilmeli. Bu gerçek bir 'clean install' testidir; hız için mevcut
+    dev ortamının paketlerini yeniden kullanmaz."""
+
+    python = _venv_python(tmp_path / "venv")
+
+    subprocess.run(
+        [str(python), "-m", "pip", "install", "--quiet", str(REPO_ROOT)],
+        check=True,
+        capture_output=True,
+        text=True,
+        timeout=CLEAN_INSTALL_TIMEOUT - 30,
+    )
+
+    listing = _pip_list(python)
+    assert "pytest" not in listing
+    assert "ruff" not in listing
+
+    env = {
+        **os.environ,
+        "TELEGRAM_BOT_TOKEN": "dummy-token",
+        "DATABASE_URL": "postgresql://user:pass@127.0.0.1:1/itobot_test",
+    }
+    result = subprocess.run(
+        [str(python), "-c", "import bot; print('IMPORT_OK')"],
+        env=env,
+        capture_output=True,
+        text=True,
+        timeout=30,
+    )
 
     assert result.returncode == 0
     assert "IMPORT_OK" in result.stdout
+
+
+@pytest.mark.timeout(CLEAN_INSTALL_TIMEOUT)
+def test_clean_dev_install_includes_test_and_lint_tooling(tmp_path):
+    """Sıfırdan bir venv'e [dev] extra'sıyla kurulum, test ve lint araçlarını
+    da (self-referencing [test] extra'sı dahil) kurmalı."""
+
+    python = _venv_python(tmp_path / "venv")
+
+    subprocess.run(
+        [str(python), "-m", "pip", "install", "--quiet", f"{REPO_ROOT}[dev]"],
+        check=True,
+        capture_output=True,
+        text=True,
+        timeout=CLEAN_INSTALL_TIMEOUT - 30,
+    )
+
+    listing = _pip_list(python)
+    assert "pytest==" in listing
+    assert "pytest-timeout==" in listing
+    assert "ruff==" in listing
