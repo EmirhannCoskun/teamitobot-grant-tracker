@@ -118,7 +118,7 @@ def _parse_application_url(card, soup: BeautifulSoup) -> str | None:
     if not details_id:
         return None
 
-    details = soup.select_one(f"#{details_id}")
+    details = soup.find(id=details_id)
 
     if details is None:
         return None

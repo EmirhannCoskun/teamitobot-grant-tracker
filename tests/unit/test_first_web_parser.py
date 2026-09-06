@@ -71,3 +71,24 @@ def test_one_malformed_card_does_not_abort_other_valid_cards():
     assert candidate.title == "Valid FRC Grant"
     assert candidate.source == "first"
     assert candidate.programs == ("FRC",)
+
+
+def test_malformed_aria_controls_does_not_abort_other_valid_cards():
+    candidates = parse_grants(load_fixture("mixed-valid-malformed-aria-controls.html"))
+
+    assert len(candidates) == 2
+
+    valid_candidate = next(
+        candidate for candidate in candidates if candidate.title == "Valid FRC Grant"
+    )
+
+    malformed_candidate = next(
+        candidate
+        for candidate in candidates
+        if candidate.title == "Malformed Aria Controls Grant"
+    )
+
+    assert valid_candidate.application_url == (
+        "https://www.firstinspires.org/grants/valid/apply"
+    )
+    assert malformed_candidate.application_url is None
