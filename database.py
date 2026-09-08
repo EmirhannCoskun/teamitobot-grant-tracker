@@ -4,6 +4,7 @@ Database models and operations
 
 from sqlalchemy import (
     create_engine,
+    text,
     Column,
     Integer,
     BigInteger,
@@ -145,11 +146,25 @@ SessionLocal = sessionmaker(
 
 
 def init_db():
-    """Initialize database tables"""
+    """Verify the schema is Alembic-migrated; does not create tables.
 
-    Base.metadata.create_all(bind=engine)
+    Şema yönetimi artık Alembic'e ait (bkz. alembic/). Bu fonksiyon sadece
+    migration'ların çalıştırıldığını doğrular; unutulmuş bir deploy adımı
+    sessizce create_all'a düşmek yerine burada net bir hatayla durur.
+    """
 
-    print("✅ Database initialized")
+    with engine.connect() as connection:
+        migrated = connection.execute(
+            text("SELECT to_regclass('public.alembic_version')")
+        ).scalar()
+
+    if migrated is None:
+        raise RuntimeError(
+            "Veritabanı şeması Alembic ile migrate edilmemiş. "
+            "Önce 'alembic upgrade head' çalıştırın."
+        )
+
+    print("✅ Database schema verified (Alembic)")
 
 
 def get_db():

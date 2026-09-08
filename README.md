@@ -330,6 +330,24 @@ yanlışlıkla bağlanmayı önlemek için hemen hata verir.
 
 Bot ayrıca Render health-check sistemi tarafından kontrol edilebilen bir HTTP health endpoint'i çalıştırır.
 
+### Veritabanı Şema Yönetimi (Alembic)
+
+Şema artık `bot.py` başlangıcındaki `create_all()` ile değil, Alembic migration'larıyla
+yönetilir. `Procfile`'daki `release: alembic upgrade head` komutu, her deploy'da web
+süreci başlamadan önce migration'ları uygular. `init_db()` artık tablo oluşturmaz;
+sadece şemanın migrate edildiğini doğrular ve migrate edilmemişse net bir hatayla durur.
+
+**⚠️ Tek seferlik cutover adımı:** Bu değişiklik ilk kez deploy edilmeden önce, gerçek
+production veritabanına erişimi olan biri şu komutu çalıştırmalıdır:
+
+```bash
+DATABASE_URL=<production-url> alembic stamp head
+```
+
+Bu adım atlanırsa bot, `alembic_version` tablosu bulunamadığı için başlatılamaz. Bu
+komut, mevcut tabloları silmez/yeniden oluşturmaz — sadece production'ın zaten baseline
+şemayla (`users`, `grants`, `notifications`, `stats`) uyumlu olduğunu işaretler.
+
 ### Production davranışı
 
 * 🔍 Hibe sayfası **15 dakikada bir** kontrol edilir
