@@ -149,7 +149,7 @@ def test_baseline_downgrade_is_refused(pg_engine):
         config = _alembic_config(scratch_url)
         command.upgrade(config, "head")
 
-        with pytest.raises(Exception):
+        with pytest.raises(Exception, match="ADR-004"):
             command.downgrade(config, "base")
 
         engine = create_engine(scratch_url)

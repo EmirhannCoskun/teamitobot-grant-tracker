@@ -333,12 +333,18 @@ Bot ayrıca Render health-check sistemi tarafından kontrol edilebilen bir HTTP 
 ### Veritabanı Şema Yönetimi (Alembic)
 
 Şema artık `bot.py` başlangıcındaki `create_all()` ile değil, Alembic migration'larıyla
-yönetilir. `Procfile`'daki `release: alembic upgrade head` komutu, her deploy'da web
-süreci başlamadan önce migration'ları uygular. `init_db()` artık tablo oluşturmaz;
-sadece şemanın migrate edildiğini doğrular ve migrate edilmemişse net bir hatayla durur.
+yönetilir. `init_db()` artık tablo oluşturmaz; sadece şemanın migrate edildiğini
+doğrular ve migrate edilmemişse net bir hatayla durur.
 
-**⚠️ Tek seferlik cutover adımı:** Bu değişiklik ilk kez deploy edilmeden önce, gerçek
-production veritabanına erişimi olan biri şu komutu çalıştırmalıdır:
+**⚠️ Render, Heroku'nun aksine Procfile'daki `release:` satırını çalıştırmaz.**
+Migration'ların her deploy'da otomatik uygulanması için Render Dashboard'ında
+servisin Settings sayfasından **"Pre-Deploy Command"** olarak
+`alembic upgrade head` ayarlanmalıdır (bu özellik ücretli planlarda mevcuttur).
+Bu ayar sadece Render erişimi olan biri tarafından yapılabilir.
+
+**⚠️ Tek seferlik cutover adımı:** Yukarıdaki ayar aktif edilmeden/ilk deploy'dan
+önce, gerçek production veritabanına erişimi olan biri şu komutu bir kez elle
+çalıştırmalıdır:
 
 ```bash
 DATABASE_URL=<production-url> alembic stamp head
