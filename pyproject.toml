@@ -29,4 +29,6 @@ dev = [
 
 [tool.setuptools]
 py-modules = ["bot", "config", "database", "scraper", "smtp_notifier"]
-packages = ["domain", "adapters", "adapters.telegram"]
+
+[tool.setuptools.packages.find]
+include = ["domain*", "adapters*"]

@@ -2,6 +2,7 @@
 Paket metadata, build ve import davranışını doğrulayan testler
 """
 
+import hashlib
 import os
 import subprocess
 import sys
@@ -22,6 +23,8 @@ EXPECTED_MODULES = (
     "smtp_notifier.py",
     "domain/__init__.py",
     "adapters/__init__.py",
+    "adapters/telegram/__init__.py",
+    "adapters/first_web/__init__.py",
 )
 
 CLEAN_INSTALL_TIMEOUT = 240
@@ -113,11 +116,13 @@ def test_wheel_build_contains_expected_modules_only(tmp_path):
 
 
 def test_wheel_build_is_reproducible(tmp_path):
-    """Aynı kaynaktan iki kez build edilen wheel, dosya içerikleri bakımından
-    birebir aynı olmalı (build-path/zaman damgası kaynaklı sapma olmamalı)."""
+    """Aynı kaynaktan iki kez build edilen wheel, hem tam dosya SHA-256'sı hem
+    de içerik bazında birebir aynı olmalı (build-path/zaman damgası/ZIP
+    metadata kaynaklı hiçbir sapma kabul edilmez)."""
 
     build_env = {**os.environ, "SOURCE_DATE_EPOCH": "1700000000"}
-    hashes = []
+    file_hashes = []
+    content_hashes_list = []
 
     for attempt in ("first", "second"):
         out_dir = tmp_path / attempt
@@ -141,15 +146,18 @@ def test_wheel_build_is_reproducible(tmp_path):
             timeout=60,
         )
         wheel = next(out_dir.glob("*.whl"))
-        with ZipFile(wheel) as archive:
-            content_hashes = {
-                info.filename: archive.read(info.filename)
-                for info in archive.infolist()
-                if not info.filename.endswith("RECORD")
-            }
-        hashes.append(content_hashes)
+        file_hashes.append(hashlib.sha256(wheel.read_bytes()).hexdigest())
 
-    assert hashes[0] == hashes[1]
+        with ZipFile(wheel) as archive:
+            content_hashes_list.append(
+                {
+                    info.filename: archive.read(info.filename)
+                    for info in archive.infolist()
+                }
+            )
+
+    assert file_hashes[0] == file_hashes[1]
+    assert content_hashes_list[0] == content_hashes_list[1]
 
 
 @pytest.mark.timeout(CLEAN_INSTALL_TIMEOUT)
@@ -178,8 +186,14 @@ def test_clean_runtime_install_excludes_dev_tools_and_imports(tmp_path):
         "TELEGRAM_BOT_TOKEN": "dummy-token",
         "DATABASE_URL": "postgresql://user:pass@127.0.0.1:1/itobot_test",
     }
+    # cwd, tmp_path'e (bot.py içermeyen bir dizin) kasıtlı olarak sabitlenir;
+    # aksi halde "python -c" REPO_ROOT'u sys.path[0] yapar ve kurulu wheel
+    # yerine kaynak checkout'taki bot.py sessizce import edilir.
+    import_cwd = tmp_path / "import-cwd"
+    import_cwd.mkdir()
     result = subprocess.run(
-        [str(python), "-c", "import bot; print('IMPORT_OK')"],
+        [str(python), "-c", "import bot; print(bot.__file__); print('IMPORT_OK')"],
+        cwd=import_cwd,
         env=env,
         capture_output=True,
         text=True,
@@ -188,6 +202,7 @@ def test_clean_runtime_install_excludes_dev_tools_and_imports(tmp_path):
 
     assert result.returncode == 0
     assert "IMPORT_OK" in result.stdout
+    assert str(REPO_ROOT) not in result.stdout
 
 
 @pytest.mark.timeout(CLEAN_INSTALL_TIMEOUT)
