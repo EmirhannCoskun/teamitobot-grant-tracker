@@ -347,12 +347,22 @@ Bu ayar sadece Render erişimi olan biri tarafından yapılabilir.
 çalıştırmalıdır:
 
 ```bash
-DATABASE_URL=<production-url> alembic stamp head
+DATABASE_URL=<production-url> python scripts/verify_and_stamp_baseline.py
 ```
 
-Bu adım atlanırsa bot, `alembic_version` tablosu bulunamadığı için başlatılamaz. Bu
-komut, mevcut tabloları silmez/yeniden oluşturmaz — sadece production'ın zaten baseline
-şemayla (`users`, `grants`, `notifications`, `stats`) uyumlu olduğunu işaretler.
+Çıplak `alembic stamp head` KULLANILMAMALIDIR — production şeması baseline'dan
+(kolon/type/nullable/constraint/index) sapmışsa fark edilmeden yanlış revizyon
+işaretlenmiş olur. Bu script önce production şemasını baseline migration'ın
+(`9ffc96b8fba3`) beklediği şemayla karşılaştırır:
+
+* **Eşleşmiyorsa:** hiçbir şey yazmadan durur, farkları listeler (exit code 1).
+  Go/no-go kararı burada — fark varsa production şeması düzeltilmeden stamp
+  uygulanmamalıdır.
+* **Eşleşiyorsa:** `alembic stamp head` çalıştırır.
+
+Bu adım atlanırsa bot, `alembic_version` tablosu bulunamadığı için başlatılamaz. Script
+mevcut tabloları silmez/yeniden oluşturmaz — sadece production'ın zaten baseline
+şemayla (`users`, `grants`, `notifications`, `stats`) uyumlu olduğunu doğrulayıp işaretler.
 
 ### Production davranışı
 

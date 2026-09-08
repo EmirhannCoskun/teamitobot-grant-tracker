@@ -19,6 +19,7 @@ from sqlalchemy.orm import declarative_base
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import sessionmaker, relationship
 from datetime import datetime
+import os
 import pytz
 
 from config import config
@@ -146,22 +147,46 @@ SessionLocal = sessionmaker(
 
 
 def init_db():
-    """Verify the schema is Alembic-migrated; does not create tables.
+    """Verify the schema is at the expected Alembic head(s); does not create tables.
 
     Şema yönetimi artık Alembic'e ait (bkz. alembic/). Bu fonksiyon sadece
-    migration'ların çalıştırıldığını doğrular; unutulmuş bir deploy adımı
-    sessizce create_all'a düşmek yerine burada net bir hatayla durur.
+    alembic_version tablosunun VARLIĞINA değil, veritabanının gerçekten
+    BEKLENEN head revizyon(lar)ında olduğuna bakar. Eksik, eski, bilinmeyen
+    veya birden fazla/farklı head durumunda net bir hatayla durur — DB
+    URL'i veya kimlik bilgisi hiçbir zaman hata mesajına yazılmaz.
     """
 
+    from alembic.config import Config
+    from alembic.script import ScriptDirectory
+
+    repo_root = os.path.dirname(os.path.abspath(__file__))
+    alembic_cfg = Config(os.path.join(repo_root, "alembic.ini"))
+    alembic_cfg.set_main_option(
+        "script_location", os.path.join(repo_root, "alembic")
+    )
+    expected_heads = set(ScriptDirectory.from_config(alembic_cfg).get_heads())
+
     with engine.connect() as connection:
-        migrated = connection.execute(
+        version_table_exists = connection.execute(
             text("SELECT to_regclass('public.alembic_version')")
         ).scalar()
 
-    if migrated is None:
+        current_heads = set()
+        if version_table_exists is not None:
+            current_heads = set(
+                connection.execute(
+                    text("SELECT version_num FROM alembic_version")
+                )
+                .scalars()
+                .all()
+            )
+
+    if current_heads != expected_heads:
         raise RuntimeError(
-            "Veritabanı şeması Alembic ile migrate edilmemiş. "
-            "Önce 'alembic upgrade head' çalıştırın."
+            "Veritabanı şeması beklenen Alembic revizyonunda değil "
+            f"(mevcut: {sorted(current_heads) or 'yok'}, "
+            f"beklenen: {sorted(expected_heads)}). "
+            "'alembic upgrade head' çalıştırın."
         )
 
     print("✅ Database schema verified (Alembic)")

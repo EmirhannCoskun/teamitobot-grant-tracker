@@ -4,6 +4,7 @@ Alembic baseline'ının gerçek PostgreSQL'e karşı davranışını doğrulayan
 
 import os
 import uuid
+from urllib.parse import quote, urlsplit
 
 import pytest
 from alembic.autogenerate import compare_metadata
@@ -171,3 +172,55 @@ def test_baseline_downgrade_is_refused(pg_engine):
         assert {"users", "grants", "notifications", "stats"} <= set(tables)
     finally:
         _drop_scratch_database(TEST_DATABASE_URL, scratch_url)
+
+
+def test_migration_succeeds_with_percent_encoded_password(pg_engine):
+    """Şifresinde '%' geçen (percent-encoded) geçerli bir DATABASE_URL,
+    ConfigParser interpolation hatasıyla kırılmamalı (env.py URL'i
+    Config'in ConfigParser'ına hiç yazmadan doğrudan kullanır)."""
+
+    parsed = urlsplit(TEST_DATABASE_URL)
+    admin_engine = create_engine(
+        _maintenance_url(TEST_DATABASE_URL), isolation_level="AUTOCOMMIT"
+    )
+
+    role_name = f"itobot_pct_{uuid.uuid4().hex[:8]}"
+    db_name = f"itobot_pct_{uuid.uuid4().hex[:8]}_test"
+    encoded_password = quote("p@ss%wd", safe="")
+
+    try:
+        with admin_engine.connect() as connection:
+            connection.execute(
+                text(f"CREATE ROLE \"{role_name}\" WITH LOGIN PASSWORD 'p@ss%wd'")
+            )
+            connection.execute(text(f'CREATE DATABASE "{db_name}" OWNER "{role_name}"'))
+
+        scoped_url = (
+            f"postgresql://{role_name}:{encoded_password}"
+            f"@{parsed.hostname}:{parsed.port}/{db_name}"
+        )
+
+        command.upgrade(_alembic_config(scoped_url), "head")
+
+        engine = create_engine(scoped_url)
+        try:
+            with engine.connect() as connection:
+                tables = (
+                    connection.execute(
+                        text(
+                            "SELECT table_name FROM information_schema.tables "
+                            "WHERE table_schema = 'public'"
+                        )
+                    )
+                    .scalars()
+                    .all()
+                )
+        finally:
+            engine.dispose()
+
+        assert "users" in tables
+    finally:
+        with admin_engine.connect() as connection:
+            connection.execute(text(f'DROP DATABASE IF EXISTS "{db_name}"'))
+            connection.execute(text(f'DROP ROLE IF EXISTS "{role_name}"'))
+        admin_engine.dispose()

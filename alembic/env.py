@@ -1,7 +1,7 @@
 import os
 from logging.config import fileConfig
 
-from sqlalchemy import engine_from_config, pool
+from sqlalchemy import create_engine, pool
 
 from alembic import context
 
@@ -19,15 +19,19 @@ from database import Base  # noqa: E402
 config = context.config
 
 # Gerçek veritabanı adresi commit edilen alembic.ini'ye yazılmaz; her zaman
-# DATABASE_URL environment değişkeninden okunur (bkz. ADR-006).
+# DATABASE_URL environment değişkeninden okunur (bkz. ADR-006). URL, Config'in
+# ConfigParser'ına hiç yazılmaz: `set_main_option`/`get_section` yolu
+# ConfigParser'ın `%` interpolation'ından geçtiği için parolasında `%`
+# (percent-encoded karakter) geçen geçerli bir URL burada patlar. Bunun yerine
+# aşağıdaki fonksiyonlar `database_url`'i doğrudan kullanır.
 database_url = os.environ.get("_ALEMBIC_DATABASE_URL")
-if database_url:
-    config.set_main_option("sqlalchemy.url", database_url)
 
 # Interpret the config file for Python logging.
-# This line sets up loggers basically.
+# This line sets up loggers basically. disable_existing_loggers=False,
+# yoksa aynı süreçte alembic'ten sonra çalışan testlerin logging/caplog
+# handler'ları da devre dışı kalıyor (ör. pytest caplog).
 if config.config_file_name is not None:
-    fileConfig(config.config_file_name)
+    fileConfig(config.config_file_name, disable_existing_loggers=False)
 
 target_metadata = Base.metadata
 
@@ -49,7 +53,7 @@ def run_migrations_offline() -> None:
     script output.
 
     """
-    url = config.get_main_option("sqlalchemy.url")
+    url = database_url or config.get_main_option("sqlalchemy.url")
     context.configure(
         url=url,
         target_metadata=target_metadata,
@@ -68,11 +72,8 @@ def run_migrations_online() -> None:
     and associate a connection with the context.
 
     """
-    connectable = engine_from_config(
-        config.get_section(config.config_ini_section, {}),
-        prefix="sqlalchemy.",
-        poolclass=pool.NullPool,
-    )
+    url = database_url or config.get_main_option("sqlalchemy.url")
+    connectable = create_engine(url, poolclass=pool.NullPool)
 
     with connectable.connect() as connection:
         context.configure(connection=connection, target_metadata=target_metadata)
