@@ -1,86 +1,105 @@
+"""Local bootstrap and compatibility access for application settings.
+
+Canonical precedence is process environment > local ``.env`` > documented
+defaults. ``.env`` is considered only for local development bootstrap; test,
+staging, and production use their explicit environment/secret store.
 """
-Configuration management
-"""
+
+from __future__ import annotations
 
 import os
-from dotenv import load_dotenv
+from collections.abc import Mapping
+from pathlib import Path
+from typing import Any
 
-load_dotenv()
+from dotenv import dotenv_values
+
+from infrastructure.config import Settings, settings_from_mapping
+
+_LOCAL_ENVIRONMENTS = frozenset({"development"})
+
+
+def load_settings(
+    environ: Mapping[str, str] | None = None,
+    *,
+    dotenv_path: str | os.PathLike[str] | None = None,
+    use_dotenv: bool = True,
+) -> Settings:
+    """Load settings once using the canonical source precedence.
+
+    Supplying ``environ`` makes tests deterministic without mutating
+    ``os.environ``. Explicit environment values always win over ``.env``.
+    """
+    environment_values = dict(os.environ if environ is None else environ)
+    mode = environment_values.get("ENVIRONMENT", "development").strip().casefold()
+    merged_values: dict[str, str] = {}
+
+    if use_dotenv and mode in _LOCAL_ENVIRONMENTS:
+        path = Path(dotenv_path) if dotenv_path is not None else Path.cwd() / ".env"
+        if path.is_file():
+            merged_values.update(
+                {
+                    key: value
+                    for key, value in dotenv_values(
+                        path,
+                        interpolate=False,
+                    ).items()
+                    if value is not None
+                }
+            )
+    merged_values.update(environment_values)
+    return settings_from_mapping(merged_values)
 
 
 class Config:
-    """Application configuration"""
+    """Temporary uppercase compatibility facade over immutable ``Settings``."""
 
-    # ==========================================
-    # TELEGRAM
-    # ==========================================
+    _COMPATIBILITY_ATTRIBUTES = {
+        "BOT_TOKEN": lambda settings: settings.telegram_bot_token,
+        "DATABASE_URL": lambda settings: settings.database_url,
+        "ENVIRONMENT": lambda settings: settings.environment.value,
+        "RELEASE_ID": lambda settings: settings.release_id,
+        "CHECK_INTERVAL": lambda settings: settings.check_interval_seconds,
+        "LOG_LEVEL": lambda settings: settings.log_level.value,
+        "PORT": lambda settings: settings.health_port,
+        "GRANT_URL": lambda settings: settings.grant_url,
+        "REQUEST_TIMEOUT": lambda settings: settings.provider_timeout_seconds,
+        "PROVIDER_TIMEOUT": lambda settings: settings.provider_timeout_seconds,
+        "TELEGRAM_TIMEOUT": lambda settings: settings.telegram_timeout_seconds,
+        "DATABASE_TIMEOUT": lambda settings: settings.database_timeout_seconds,
+        "POLLING_BACKLOG_POLICY": (
+            lambda settings: settings.polling_backlog_policy.value
+        ),
+        "OUTBOX_MAX_ATTEMPTS": lambda settings: settings.outbox_max_attempts,
+        "OUTBOX_BASE_BACKOFF": (lambda settings: settings.outbox_base_backoff_seconds),
+        "OUTBOX_MAX_BACKOFF": (lambda settings: settings.outbox_max_backoff_seconds),
+        "OUTBOX_LEASE_SECONDS": lambda settings: settings.outbox_lease_seconds,
+        "SMTP_HOST": lambda settings: settings.smtp.host,
+        "SMTP_PORT": lambda settings: settings.smtp.port,
+        "SMTP_USERNAME": lambda settings: settings.smtp.username,
+        "SMTP_PASSWORD": lambda settings: settings.smtp.password,
+        "SMTP_FROM": lambda settings: settings.smtp.sender,
+        "SMTP_TO": lambda settings: settings.smtp.recipients,
+        "SMTP_SECURITY": lambda settings: settings.smtp.security,
+        "SMTP_TIMEOUT": lambda settings: settings.smtp.timeout,
+    }
 
-    BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
+    def __init__(self, settings: Settings) -> None:
+        self.settings = settings
 
-    # ==========================================
-    # SMTP (OPTIONAL)
-    # ==========================================
+    def __getattr__(self, name: str) -> Any:
+        accessor = self._COMPATIBILITY_ATTRIBUTES.get(name)
+        if accessor is None:
+            raise AttributeError(name)
+        return accessor(self.settings)
 
-    SMTP_HOST = os.getenv("SMTP_HOST")
-    SMTP_PORT = os.getenv("SMTP_PORT")
-    SMTP_USERNAME = os.getenv("SMTP_USERNAME")
-    SMTP_PASSWORD = os.getenv("SMTP_PASSWORD")
-    SMTP_FROM = os.getenv("SMTP_FROM")
-    SMTP_TO = os.getenv("SMTP_TO")
-    SMTP_SECURITY = os.getenv("SMTP_SECURITY", "STARTTLS")
-    SMTP_TIMEOUT = os.getenv("SMTP_TIMEOUT", "10")
+    def __repr__(self) -> str:
+        return f"Config({dict(self.settings.redacted_summary())!r})"
 
-    # ==========================================
-    # DATABASE
-    # ==========================================
-
-    # PostgreSQL DATABASE_URL zorunlu
-    DATABASE_URL = os.getenv("DATABASE_URL")
-
-    # ==========================================
-    # APPLICATION
-    # ==========================================
-
-    ENVIRONMENT = os.getenv("ENVIRONMENT", "development")
-    CHECK_INTERVAL = int(os.getenv("CHECK_INTERVAL", 900))  # 15 minutes
-    LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO")
-    PORT = int(os.getenv("PORT", 8080))
-
-    # ==========================================
-    # SCRAPER
-    # ==========================================
-
-    GRANT_URL = (
-        "https://www.firstinspires.org/programs/"
-        "team-grant-opportunities"
-    )
-
-    REQUEST_TIMEOUT = 15
-
-    # ==========================================
-    # VALIDATION
-    # ==========================================
-
-    @staticmethod
-    def validate():
-        """Validate critical configuration"""
-
-        if not Config.BOT_TOKEN:
-            raise ValueError(
-                "❌ TELEGRAM_BOT_TOKEN not set in environment variables"
-            )
-
-        if not Config.DATABASE_URL:
-            raise ValueError(
-                "❌ DATABASE_URL not set in environment variables"
-            )
-
+    def validate(self) -> bool:
+        """Retain the legacy validation entrypoint; construction already validates."""
         return True
 
 
-# ==========================================
-# INITIALIZE CONFIG
-# ==========================================
-
-config = Config()
-config.validate()
+settings = load_settings()
+config = Config(settings)
