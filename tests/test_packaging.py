@@ -25,6 +25,8 @@ EXPECTED_MODULES = (
     "adapters/__init__.py",
     "adapters/telegram/__init__.py",
     "adapters/first_web/__init__.py",
+    "infrastructure/__init__.py",
+    "infrastructure/config.py",
 )
 
 CLEAN_INSTALL_TIMEOUT = 240
@@ -88,6 +90,31 @@ def test_lock_file_pins_every_runtime_dependency_at_declared_version():
 
     for name, version in declared.items():
         assert lock_versions.get(name.lower()) == version, name
+
+
+def test_requirements_txt_matches_pyproject_exactly():
+    """requirements.txt (Procfile/Render uyumluluk aynası), pyproject.toml'daki
+    runtime bağımlılıklarıyla isim ve sürüm bazında birebir aynı kümeyi
+    içermeli — ne eksik ne fazla. Aksi halde iki kaynak birbirinden
+    habersizce sürüklenir (bkz. requirements.lock testinin sadece tek
+    yönlü kontrol ettiği, burada iki yönlü kontrol edilen aynı risk)."""
+
+    with open(REPO_ROOT / "pyproject.toml", "rb") as handle:
+        declared = dict(
+            dep.split("==") for dep in tomllib.load(handle)["project"]["dependencies"]
+        )
+
+    requirements_txt = {}
+    for line in (REPO_ROOT / "requirements.txt").read_text().splitlines():
+        line = line.strip()
+        if not line or line.startswith("#"):
+            continue
+        name, version = line.split("==")
+        requirements_txt[name.lower()] = version
+
+    declared_normalized = {name.lower(): version for name, version in declared.items()}
+
+    assert requirements_txt == declared_normalized
 
 
 def test_wheel_build_contains_expected_modules_only(tmp_path):
@@ -186,13 +213,19 @@ def test_clean_runtime_install_excludes_dev_tools_and_imports(tmp_path):
         "TELEGRAM_BOT_TOKEN": "dummy-token",
         "DATABASE_URL": "postgresql://user:pass@127.0.0.1:1/itobot_test",
     }
-    # cwd, tmp_path'e (bot.py içermeyen bir dizin) kasıtlı olarak sabitlenir;
-    # aksi halde "python -c" REPO_ROOT'u sys.path[0] yapar ve kurulu wheel
-    # yerine kaynak checkout'taki bot.py sessizce import edilir.
+    # cwd, tmp_path'e (bot.py/config.py içermeyen bir dizin) kasıtlı olarak
+    # sabitlenir; aksi halde "python -c" REPO_ROOT'u sys.path[0] yapar ve
+    # kurulu wheel yerine kaynak checkout'taki dosyalar sessizce import edilir.
     import_cwd = tmp_path / "import-cwd"
     import_cwd.mkdir()
+    script = (
+        "import bot, config\n"
+        "print(bot.__file__)\n"
+        "print(config.__file__)\n"
+        "print('IMPORT_OK')\n"
+    )
     result = subprocess.run(
-        [str(python), "-c", "import bot; print(bot.__file__); print('IMPORT_OK')"],
+        [str(python), "-c", script],
         cwd=import_cwd,
         env=env,
         capture_output=True,
