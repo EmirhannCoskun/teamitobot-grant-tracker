@@ -301,6 +301,22 @@ GitHub Actions da `main`'e açılan her pull request için aynı canonical quali
 entrypoint'i çalıştırır. Merge engellemesi repository branch protection/ruleset
 ayarındaki required `fast-checks` status check'ine bağlıdır.
 
+### Paket Metadata ve Bağımlılık Grupları
+
+`pyproject.toml`, doğrudan bağımlılıkların (`[project.dependencies]`) ve
+`test`/`dev` extra gruplarının tek kaynağıdır; `dev` extra'sı `test`'i içerir
+(`itobot-grant-tracker[test]`). `requirements.txt`, mevcut Render `Procfile`
+akışıyla uyumluluk için elle senkron tutulan bir aynadır. `requirements.lock`,
+son üretilen tam çözümün (tüm transitive bağımlılıklar dahil) birebir pin'idir
+ve gerçekten tekrarlanabilir bir kurulum isteyen ortamlar için kullanılır:
+
+```bash
+pip install .            # sadece runtime
+pip install .[test]      # runtime + pytest
+pip install .[dev]       # runtime + test + ruff
+pip install -r requirements.lock  # tam pinlenmiş, tekrarlanabilir kurulum
+```
+
 ### PostgreSQL Test Altyapısı
 
 `tests/postgres/` altındaki testler gerçek, izole bir PostgreSQL'e ihtiyaç duyar
