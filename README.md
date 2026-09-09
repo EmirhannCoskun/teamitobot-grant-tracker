@@ -129,6 +129,34 @@ Ayrıca aynı kullanıcı için aynı hibe hakkında birden fazla bildirim oluş
 
 Bundan sonra yeni FRC hibe fırsatları bulunduğunda Telegram üzerinden bildirim alırsınız.
 
+### Canonical runtime configuration
+
+Uygulama ayarları tek bir immutable settings nesnesi olarak startup sırasında
+oluşturulur. Kaynak önceliği `process environment > local .env > varsayılanlar`
+şeklindedir. `.env` yalnız `development` modunda okunur; `test`, `staging` ve
+`production` secret ve ayarları explicit process/deployment environment'ından
+alınır. Güncel local şablon [`.env.example`](.env.example) dosyasıdır.
+
+| Değişken | Sözleşme / varsayılan |
+| --- | --- |
+| `TELEGRAM_BOT_TOKEN` | Zorunlu secret |
+| `DATABASE_URL` | Zorunlu PostgreSQL URL'si; secret olarak saklanır |
+| `ENVIRONMENT` | `development`, `test`, `staging`, `production`; varsayılan `development` |
+| `RELEASE_ID` | 1–128 karakterli release/build kimliği; varsayılan `local` |
+| `CHECK_INTERVAL` | `1..86400` saniye; varsayılan `900` |
+| `PORT` | `1..65535`; test modunda `0` da kabul edilir; varsayılan `8080` |
+| `LOG_LEVEL` | `DEBUG`, `INFO`, `WARNING`, `ERROR`, `CRITICAL`; varsayılan `INFO` |
+| `GRANT_URL` | Absolute HTTP(S) provider adresi |
+| `PROVIDER_TIMEOUT`, `TELEGRAM_TIMEOUT`, `DATABASE_TIMEOUT` | `0.1..300` saniye |
+| `POLLING_BACKLOG_POLICY` | `process` veya `discard`; varsayılan `process` |
+| `OUTBOX_MAX_ATTEMPTS` | `1..100`; varsayılan `5` |
+| `OUTBOX_BASE_BACKOFF`, `OUTBOX_MAX_BACKOFF` | Pozitif retry aralıkları; max değeri base'den küçük olamaz |
+| `OUTBOX_LEASE_SECONDS` | `1..86400`; Telegram timeout'undan büyük olmalıdır |
+
+Eksik veya geçersiz yapılandırma, herhangi bir secret değerini stdout/stderr'a
+yazmadan değişken adını raporlar ve process'i kaynaklar başlatılmadan non-zero
+exit ile durdurur.
+
 ### SMTP operasyon konfigürasyonu
 
 v0.2.0 — Operational Grant Notifications sürümünde SMTP kanalı opsiyoneldir ve
@@ -272,6 +300,22 @@ python scripts/quality.py
 GitHub Actions da `main`'e açılan her pull request için aynı canonical quality
 entrypoint'i çalıştırır. Merge engellemesi repository branch protection/ruleset
 ayarındaki required `fast-checks` status check'ine bağlıdır.
+
+### Paket Metadata ve Bağımlılık Grupları
+
+`pyproject.toml`, doğrudan bağımlılıkların (`[project.dependencies]`) ve
+`test`/`dev` extra gruplarının tek kaynağıdır; `dev` extra'sı `test`'i içerir
+(`itobot-grant-tracker[test]`). `requirements.txt`, mevcut Render `Procfile`
+akışıyla uyumluluk için elle senkron tutulan bir aynadır. `requirements.lock`,
+son üretilen tam çözümün (tüm transitive bağımlılıklar dahil) birebir pin'idir
+ve gerçekten tekrarlanabilir bir kurulum isteyen ortamlar için kullanılır:
+
+```bash
+pip install .            # sadece runtime
+pip install .[test]      # runtime + pytest
+pip install .[dev]       # runtime + test + ruff
+pip install -r requirements.lock  # tam pinlenmiş, tekrarlanabilir kurulum
+```
 
 ### PostgreSQL Test Altyapısı
 
