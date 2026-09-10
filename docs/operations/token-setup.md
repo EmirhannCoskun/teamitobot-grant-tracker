@@ -266,30 +266,100 @@ Production Render environment'ında token'ın kendisini loglamak veya ekrana ç�
 
 ### 8.3 Secret Rotation
 
-Telegram bot token'ı rotate edilecekse:
+Telegram bot token'ının yenilenmesi, kimlik bilgisi değiştirme işlemidir.
+Uygulamanın deployment işlemini geri alma işlemiyle aynı işlem olarak
+değerlendirilmemelidir.
 
-1. Yeni token'ı Telegram tarafındaki yetkili bot yönetim workflow'u üzerinden oluşturun.
-2. Render Dashboard'da production service'in `Environment` bölümünü açın.
-3. `TELEGRAM_BOT_TOKEN` değerini yeni token ile değiştirin.
-4. `Save and deploy` ile değişikliği production'a uygulayın.
-5. Deploy'un başarılı olduğunu `Deploys` bölümünden doğrulayın.
-6. Application logs içinde secret değerinin bulunmadığını kontrol edin.
-7. Botun normal şekilde çalıştığını ve health/status kontrollerinin başarılı olduğunu doğrulayın.
-8. Eski token'ın artık kullanılmadığından emin olun.
+İşleme başlamadan önce:
 
-Yeni token production'da doğrulanmadan önce eski çalışan configuration kaldırılmamalıdır.
+- Yenileme işleminden sorumlu kişi ve gerektiğinde ulaşılacak kişi belirlenmelidir.
+- Standart kurulumda canonical secret source olarak Render servis
+  Environment Variables alanı doğrulanmalıdır.
+- Onaylanmış bir Environment Group kullanılıyorsa bunun canonical secret source
+  olup olmadığı doğrulanmalıdır.
+- Render ve BotFather erişiminin hazır olduğu kontrol edilmelidir.
+- Gerçek token; loglara, terminal geçmişine, kaynak koduna, ekran görüntülerine,
+  sohbet mesajlarına, ticket'lara, issue'lara, pull request'lere veya review
+  yorumlarına yazılmamalıdır.
+
+Yenileme sırası:
+
+1. Bakım zamanı, sorumlu kişi ve gerektiğinde ulaşılacak kişi belirlenmelidir.
+2. BotFather üzerinden yeni ve geçerli bir token oluşturulmalıdır.
+3. Token oluşturma veya iptal etme işleminin anında etkili olan bir kimlik
+   bilgisi değişikliği olduğu kabul edilmelidir.
+4. İptal edilmiş eski token'ın artık geçerli olmadığı ve rollback için
+   kullanılamayacağı unutulmamalıdır.
+5. `TELEGRAM_BOT_TOKEN`, canonical Render secret source içinde güncellenmelidir.
+6. Değişiklik kaydedilmeli ve servis yeniden deploy edilmelidir.
+7. Deployment işleminin başarıyla tamamlandığı doğrulanmalıdır.
+8. Uygulamanın başlatılması ve sağlık kontrolleri doğrulanmalıdır.
+9. Telegram kimlik doğrulaması, uygulamanın token'ı açığa çıkarmayan başlangıç
+   doğrulaması veya `getMe` tabanlı doğrulama yöntemiyle kontrol edilmelidir.
+10. Loglarda ve deployment çıktısında token bulunmadığı doğrulanmalıdır.
+11. Doğrulama başarısız olursa olay eskale edilmelidir. İptal edilmiş eski token
+    geri yüklenmemelidir. BotFather üzerinden yeni ve geçerli bir token
+    oluşturulmalı, canonical secret source güncellenmeli, yeniden deploy
+    edilmeli ve doğrulama adımları tekrarlanmalıdır.
+
+Yeni token'ı güncelleme ve deploy etme süreci hazır olmadan geçerli token
+iptal edilmemelidir.
+
+Bir token iptal edildikten sonra eski değer kullanılamaz kabul edilmelidir.
+Eski token'ın önceki bir deployment içinde bulunması, onu geçerli bir kurtarma
+seçeneğine dönüştürmez.
 
 ### 8.4 Rollback
 
-Token değişikliği veya ilgili deployment production davranışını bozarsa:
+Render deployment rollback işlemi ile Telegram token yenileme işlemi farklı
+işlemlerdir ve farklı güvenlik kurallarına sahiptir.
 
-* Öncelikle sorunun secret değerinden mi yoksa application deploy'undan mı kaynaklandığını ayırın.
-* Yanlış veya kullanılamayan token söz konusuysa Render `Environment` bölümündeki `TELEGRAM_BOT_TOKEN` değerini son bilinen çalışan değerle değiştirin ve yeniden deploy edin.
-* Kod değişikliği kaynaklı bir problem varsa Render `Deploys` bölümündeki son başarılı deploy'a rollback yapılabilir.
-* Rollback sonrasında service'in tekrar çalıştığı ve health/status kontrollerinin başarılı olduğu doğrulanmalıdır.
-* Sorun çözülmeden yeni production değişiklikleri uygulanmamalıdır.
+Render rollback işlemi, hedef deployment'a ait build çıktısını yeniden
+kullanabilir. Ayrıca hedef deployment'a ait servis özelindeki Environment
+Variables değerlerini de geri getirebilir. Bu nedenle token yenilemesinden
+önceki bir deployment'a dönmek, eski bir `TELEGRAM_BOT_TOKEN` değerinin tekrar
+kullanılmasına neden olabilir.
 
-Render Dashboard üzerinden önceki başarılı bir deploy'a rollback yapılabilir. Rollback yalnızca uygulama deploy'unu geri almak için kullanılmalı; secret rotation durumunda yanlış token'ın tekrar kullanılmasına neden olacak şekilde düşünülmemelidir.
+Kod rollback işlemi, iptal edilmiş veya geçersiz bir Telegram token'ını
+kurtarmak için kullanılmamalıdır.
+
+Olay türü birbirinden ayrılmalıdır:
+
+- Kod veya uygulama hatası varsa Render deployment rollback gerekebilir.
+- İptal edilmiş veya geçersiz token, eski deployment'a dönülerek kurtarılmamalıdır.
+- İptal edilmiş token geçerli bir rollback kimlik bilgisi değildir.
+- Mevcut token kaybedilmiş, geçersiz hâle gelmiş veya iptal edilmişse BotFather
+  üzerinden yeni ve geçerli bir token oluşturulmalıdır.
+
+Kod rollback sırası:
+
+1. Sorunun kimlik bilgisi değil, kod veya deployment kaynaklı olduğu
+   doğrulanmalıdır.
+2. Başarılı olan hedef deployment belirlenmelidir.
+3. Mevcut geçerli token'ın kaynağı, token değeri açığa çıkarılmadan
+   belirlenmelidir.
+4. Render deployment rollback işlemi başlatılmalıdır.
+5. Rollback işleminin hedef deployment'a ait servis özelindeki Environment
+   Variables değerlerini geri getirebileceği kabul edilmelidir.
+6. Geçerli `TELEGRAM_BOT_TOKEN`, canonical secret source içinde açıkça yeniden
+   uygulanmalıdır.
+7. Değişiklik kaydedilmeli ve servis yeniden deploy edilmelidir.
+8. Uygulamanın başlangıcı, Telegram kimlik doğrulaması, sağlık kontrolleri ve
+   loglar doğrulanmalıdır.
+9. Geçerli token açıkça yeniden uygulanıp başarıyla doğrulanmadan rollback işlemi
+   tamamlanmış kabul edilmemelidir.
+
+Environment Group ile ilgili hususlar:
+
+- Render rollback işlemi Environment Group içindeki değerleri doğrudan
+  değiştirmez.
+- Ancak rollback, hedef deployment'a bağlı Environment Group bağlantılarını
+  değiştirebilir.
+- Rollback sonrasında etkin Environment kaynağı doğrulanmalı ve amaçlanan
+  geçerli token'ın kullanıldığı kontrol edilmelidir.
+- Kontrol listesinde tam olarak bir canonical token source belirtilmelidir.
+  Servis değişkenleri, Environment Group, yerel yapılandırma ve deployment'a
+  özel ayarlar arasında birbiriyle yarışan token değerleri bulunmamalıdır.
 
 ### 8.5 Cutover from the Deprecated Workflow
 
@@ -320,8 +390,35 @@ Her secret kurulumu veya rotation işleminden sonra:
 * [ ] Token command-line argument olarak kullanılmadı.
 * [ ] Token repository veya plaintext dosyaya yazılmadı.
 * [ ] Eski Flask/file-based workflow production configuration kaynağı olarak kullanılmıyor.
-* [ ] Rotation işleminde eski tokenın kullanım durumu doğrulandı.
+* [ ] Yenileme sonrasında eski tokenın artık kullanılmadığı doğrulandı.
+* [ ] İptal edilmiş eski tokenın rollback için kullanılmayacağı doğrulandı.
+* [ ] Yeni tokenın canonical secret source içinde açıkça uygulandığı ve doğrulandığı kontrol edildi.
 
+### 8.7 Protection of Confidential Information
+
+Gerçek Telegram bot token'ı aşağıdaki alanların hiçbirinde bulunmamalıdır:
+
+- Uygulama logları
+- Deployment logları
+- Terminal geçmişi
+- Komut satırı argümanları
+- Kaynak kodu
+- Commit edilmiş yapılandırma dosyaları
+- Commit edilmiş `.env` dosyaları
+- Ekran görüntüleri
+- GitHub issue'ları
+- Pull request'ler
+- Review yorumları
+- Olay kayıtları
+- Support ticket'ları
+- Sohbet mesajları
+
+Yalnızca token'ı açığa çıkarmayan, maskelenmiş durum bilgileri ve doğrulama
+sonuçları kullanılmalıdır.
+
+Token yalnızca onaylanmış secret-management arayüzü üzerinden veya yerel
+doğrulama işlemi açıkça gerektiriyorsa işlem ortamı değişkeni aracılığıyla
+girilmelidir.
 
 ## 9. Production Setup Checklist
 

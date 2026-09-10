@@ -286,8 +286,6 @@ def test_clean_wheel_install_runs_token_setup_outside_source_tree(tmp_path):
     import_cwd = tmp_path / "import-cwd"
     import_cwd.mkdir()
 
-    secret = "987654321:SUPER_SECRET_TOKEN_DO_NOT_EXPOSE"
-
     env = {
         **os.environ,
         "TELEGRAM_BOT_TOKEN": "",
@@ -304,7 +302,6 @@ def test_clean_wheel_install_runs_token_setup_outside_source_tree(tmp_path):
 
     assert result.returncode == 1
     assert "TELEGRAM_BOT_TOKEN is not set in the environment." in result.stderr
-    assert secret not in result.stdout + result.stderr
     assert str(REPO_ROOT) not in result.stdout + result.stderr
 
     module_check = subprocess.run(

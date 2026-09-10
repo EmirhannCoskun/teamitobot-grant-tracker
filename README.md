@@ -202,7 +202,7 @@ Sonuçlar process exit code ile ayrılır:
 | Exit code | Sonuç       | Anlamı                                                                                                    |
 | --------- | ----------- | --------------------------------------------------------------------------------------------------------- |
 | `0`       | Valid       | Telegram `getMe` isteğini başarıyla kabul etti                                                            |
-| `1`       | Invalid     | Token eksik, formatı geçersiz veya Telegram açıkça `401 Unauthorized` döndürdü                            |
+| `1`       | Invalid / Usage error | Token eksik, formatı geçersiz, Telegram `401 Unauthorized` döndürdü veya beklenmeyen CLI argümanı kullanıldı |
 | `2`       | Unavailable | Network/timeout, rate limit, server error veya beklenmeyen provider cevabı nedeniyle doğrulama yapılamadı |
 
 Özellikle `getMe` isteğinin kullanılamaması ile token'ın geçersiz olması aynı
