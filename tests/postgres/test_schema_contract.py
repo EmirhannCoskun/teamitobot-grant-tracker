@@ -273,7 +273,81 @@ def test_missing_foreign_key_is_rejected(pg_engine):
         _drop_scratch_database(scratch_url)
 
 
-def test_missing_table_is_rejected(pg_engine):
+def test_missing_non_unique_index_is_rejected(pg_engine):
+    scratch_url = _create_scratch_database()
+    try:
+        broken_ddl = INDEPENDENT_LEGACY_DDL.replace(
+            "CREATE INDEX ix_grants_detected_at ON grants (detected_at);\n", ""
+        )
+        _apply_ddl(scratch_url, broken_ddl)
+
+        engine = create_engine(scratch_url)
+        try:
+            inspector = inspect(engine)
+            actual = describe_actual_schema(inspector, EXPECTED_SCHEMA.keys())
+        finally:
+            engine.dispose()
+
+        mismatches = diff_schema(EXPECTED_SCHEMA, actual)
+        assert any("grants" in m and "index uyuşmuyor" in m for m in mismatches)
+    finally:
+        _drop_scratch_database(scratch_url)
+
+
+def test_wrong_index_columns_is_rejected(pg_engine):
+    scratch_url = _create_scratch_database()
+    try:
+        broken_ddl = INDEPENDENT_LEGACY_DDL.replace(
+            "CREATE INDEX ix_grants_detected_at ON grants (detected_at);",
+            "CREATE INDEX ix_grants_detected_at ON grants (title);",
+        )
+        _apply_ddl(scratch_url, broken_ddl)
+
+        engine = create_engine(scratch_url)
+        try:
+            inspector = inspect(engine)
+            actual = describe_actual_schema(inspector, EXPECTED_SCHEMA.keys())
+        finally:
+            engine.dispose()
+
+        mismatches = diff_schema(EXPECTED_SCHEMA, actual)
+        assert any("grants" in m and "index uyuşmuyor" in m for m in mismatches)
+    finally:
+        _drop_scratch_database(scratch_url)
+
+
+def test_missing_autoincrement_is_rejected(pg_engine):
+    """Baseline'da id kolonları sequence-backed (SERIAL); production'da düz
+    INTEGER PRIMARY KEY olursa (sequence yok) verifier bunu yakalamalı,
+    aksi halde ID otomatik üretilemeyen bir production DB stamp'lenir."""
+
+    scratch_url = _create_scratch_database()
+    try:
+        broken_ddl = INDEPENDENT_LEGACY_DDL.replace(
+            "id SERIAL PRIMARY KEY,\n    chat_id",
+            "id INTEGER PRIMARY KEY,\n    chat_id",
+        )
+        _apply_ddl(scratch_url, broken_ddl)
+
+        engine = create_engine(scratch_url)
+        try:
+            inspector = inspect(engine)
+            actual = describe_actual_schema(inspector, EXPECTED_SCHEMA.keys())
+        finally:
+            engine.dispose()
+
+        mismatches = diff_schema(EXPECTED_SCHEMA, actual)
+        assert any("users.id" in m and "autoincrement" in m for m in mismatches)
+    finally:
+        _drop_scratch_database(scratch_url)
+
+
+def test_main_refuses_stamp_when_table_missing(pg_engine, monkeypatch, capsys):
+    """main() gerçek CLI yolunda eksik bir tabloyu redacted bir hatayla
+    reddetmeli; sadece diff_schema() birim testi değil, uçtan uca kanıt."""
+
+    import verify_and_stamp_baseline
+
     scratch_url = _create_scratch_database()
     try:
         stats_block = INDEPENDENT_LEGACY_DDL[
@@ -284,24 +358,58 @@ def test_missing_table_is_rejected(pg_engine):
         broken_ddl = INDEPENDENT_LEGACY_DDL.replace(stats_block, "")
         _apply_ddl(scratch_url, broken_ddl)
 
+        monkeypatch.setenv("DATABASE_URL", scratch_url)
+        exit_code = verify_and_stamp_baseline.main()
+        assert exit_code == 1
+        stderr = capsys.readouterr().err
+        assert "eşleşmiyor" in stderr
+        assert "tablo eksik: stats" in stderr
+
         engine = create_engine(scratch_url)
         try:
-            inspector = inspect(engine)
-            actual = describe_actual_schema(
-                inspector, [t for t in EXPECTED_SCHEMA if t != "stats"]
-            )
-            actual["stats"] = {
-                "columns": {},
-                "primary_key": (),
-                "unique_constraints": frozenset(),
-                "foreign_keys": frozenset(),
-                "unique_indexes": frozenset(),
-            }
+            with engine.connect() as connection:
+                version_table = connection.execute(
+                    text("SELECT to_regclass('public.alembic_version')")
+                ).scalar()
         finally:
             engine.dispose()
+        assert version_table is None
+    finally:
+        _drop_scratch_database(scratch_url)
 
-        mismatches = diff_schema(EXPECTED_SCHEMA, actual)
-        assert any("stats" in m and "kolon eksik" in m for m in mismatches)
+
+def test_main_refuses_stamp_when_unexpected_extra_table_exists(
+    pg_engine, monkeypatch, capsys
+):
+    """main() artık sadece beklenen tabloları değil, public schema'daki TÜM
+    tabloları inceliyor; production'da baseline'da olmayan bir tablo varsa
+    bu da fark edilmeden geçmemeli."""
+
+    import verify_and_stamp_baseline
+
+    scratch_url = _create_scratch_database()
+    try:
+        extra_table_ddl = (
+            INDEPENDENT_LEGACY_DDL
+            + "\nCREATE TABLE audit_log (\n    id SERIAL PRIMARY KEY\n);\n"
+        )
+        _apply_ddl(scratch_url, extra_table_ddl)
+
+        monkeypatch.setenv("DATABASE_URL", scratch_url)
+        exit_code = verify_and_stamp_baseline.main()
+        assert exit_code == 1
+        stderr = capsys.readouterr().err
+        assert "beklenmeyen ekstra tablo: audit_log" in stderr
+
+        engine = create_engine(scratch_url)
+        try:
+            with engine.connect() as connection:
+                version_table = connection.execute(
+                    text("SELECT to_regclass('public.alembic_version')")
+                ).scalar()
+        finally:
+            engine.dispose()
+        assert version_table is None
     finally:
         _drop_scratch_database(scratch_url)
 

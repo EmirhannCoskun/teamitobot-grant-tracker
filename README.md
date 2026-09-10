@@ -408,6 +408,23 @@ Bu adım atlanırsa bot, `alembic_version` tablosu bulunamadığı için başlat
 mevcut tabloları silmez/yeniden oluşturmaz — sadece production'ın zaten baseline
 şemayla (`users`, `grants`, `notifications`, `stats`) uyumlu olduğunu doğrulayıp işaretler.
 
+**⚠️ Bilinen kapsam dışı adım — production şema envanteri:** `verify_and_stamp_baseline.py`
+production'ı baseline migration'dan elle çıkarılmış bir sözleşmeyle (`EXPECTED_SCHEMA`)
+karşılaştırır; gerçek production'ın sanitize edilmiş bir yapı envanteri henüz repository'de
+yok, çünkü ne geliştirme ortamında ne de bu depoya erişen kişilerde gerçek production
+veritabanına erişim var. Production erişimi olan biri, cutover'dan önce (veya sonrasında
+doğrulama amacıyla) şunu bir kez çalıştırıp çıktısını commit etmelidir:
+
+```bash
+DATABASE_URL=<production-url> ENVIRONMENT_ID=render-prod \
+    python scripts/capture_schema_inventory.py > docs/production_schema_inventory.json
+```
+
+Bu script yalnızca tablo/kolon/type/nullable/constraint/index YAPISINI okur — hiçbir satır
+verisi veya secret sorgulamaz/yazmaz. Çıktı; PostgreSQL sürümü, yakalama zamanı, ortam
+kimliği ve şema içeriğinin SHA-256 checksum'ını içerir, böylece envanterin ne zaman/nereden
+alındığı izlenebilir olur.
+
 ### Production davranışı
 
 * 🔍 Hibe sayfası **15 dakikada bir** kontrol edilir

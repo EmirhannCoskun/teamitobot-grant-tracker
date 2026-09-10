@@ -27,40 +27,64 @@ REPOSITORY_ROOT = Path(__file__).resolve().parents[1]
 EXPECTED_SCHEMA = {
     "users": {
         "columns": {
-            "id": {"type": "INTEGER", "nullable": False},
-            "chat_id": {"type": "BIGINT", "nullable": False},
-            "username": {"type": "VARCHAR(255)", "nullable": True},
-            "is_active": {"type": "BOOLEAN", "nullable": True},
-            "is_subscribed": {"type": "BOOLEAN", "nullable": True},
-            "total_scrapes": {"type": "INTEGER", "nullable": False},
-            "created_at": {"type": "TIMESTAMP", "nullable": True},
+            "id": {"type": "INTEGER", "nullable": False, "autoincrement": True},
+            "chat_id": {"type": "BIGINT", "nullable": False, "autoincrement": False},
+            "username": {
+                "type": "VARCHAR(255)",
+                "nullable": True,
+                "autoincrement": False,
+            },
+            "is_active": {"type": "BOOLEAN", "nullable": True, "autoincrement": False},
+            "is_subscribed": {
+                "type": "BOOLEAN",
+                "nullable": True,
+                "autoincrement": False,
+            },
+            "total_scrapes": {
+                "type": "INTEGER",
+                "nullable": False,
+                "autoincrement": False,
+            },
+            "created_at": {
+                "type": "TIMESTAMP",
+                "nullable": True,
+                "autoincrement": False,
+            },
         },
         "primary_key": ("id",),
         "unique_constraints": frozenset(),
         "foreign_keys": frozenset(),
-        "unique_indexes": frozenset({("chat_id",)}),
+        "indexes": frozenset({(("chat_id",), True)}),
     },
     "grants": {
         "columns": {
-            "id": {"type": "INTEGER", "nullable": False},
-            "text": {"type": "VARCHAR(1000)", "nullable": True},
-            "title": {"type": "VARCHAR(1000)", "nullable": True},
-            "start_date": {"type": "DATE", "nullable": True},
-            "end_date": {"type": "DATE", "nullable": True},
-            "url": {"type": "VARCHAR(2000)", "nullable": True},
-            "detected_at": {"type": "TIMESTAMP", "nullable": True},
+            "id": {"type": "INTEGER", "nullable": False, "autoincrement": True},
+            "text": {"type": "VARCHAR(1000)", "nullable": True, "autoincrement": False},
+            "title": {
+                "type": "VARCHAR(1000)",
+                "nullable": True,
+                "autoincrement": False,
+            },
+            "start_date": {"type": "DATE", "nullable": True, "autoincrement": False},
+            "end_date": {"type": "DATE", "nullable": True, "autoincrement": False},
+            "url": {"type": "VARCHAR(2000)", "nullable": True, "autoincrement": False},
+            "detected_at": {
+                "type": "TIMESTAMP",
+                "nullable": True,
+                "autoincrement": False,
+            },
         },
         "primary_key": ("id",),
         "unique_constraints": frozenset(),
         "foreign_keys": frozenset(),
-        "unique_indexes": frozenset(),
+        "indexes": frozenset({(("detected_at",), False)}),
     },
     "notifications": {
         "columns": {
-            "id": {"type": "INTEGER", "nullable": False},
-            "user_id": {"type": "INTEGER", "nullable": False},
-            "grant_id": {"type": "INTEGER", "nullable": False},
-            "sent_at": {"type": "TIMESTAMP", "nullable": True},
+            "id": {"type": "INTEGER", "nullable": False, "autoincrement": True},
+            "user_id": {"type": "INTEGER", "nullable": False, "autoincrement": False},
+            "grant_id": {"type": "INTEGER", "nullable": False, "autoincrement": False},
+            "sent_at": {"type": "TIMESTAMP", "nullable": True, "autoincrement": False},
         },
         "primary_key": ("id",),
         "unique_constraints": frozenset({("grant_id", "user_id")}),
@@ -70,21 +94,41 @@ EXPECTED_SCHEMA = {
                 ("user_id", "users", "id"),
             }
         ),
-        "unique_indexes": frozenset(),
+        "indexes": frozenset(),
     },
     "stats": {
         "columns": {
-            "id": {"type": "INTEGER", "nullable": False},
-            "total_scrapes": {"type": "INTEGER", "nullable": True},
-            "total_notifications": {"type": "INTEGER", "nullable": True},
-            "total_users": {"type": "INTEGER", "nullable": True},
-            "started_at": {"type": "TIMESTAMP", "nullable": True},
-            "last_scrape_at": {"type": "TIMESTAMP", "nullable": True},
+            "id": {"type": "INTEGER", "nullable": False, "autoincrement": True},
+            "total_scrapes": {
+                "type": "INTEGER",
+                "nullable": True,
+                "autoincrement": False,
+            },
+            "total_notifications": {
+                "type": "INTEGER",
+                "nullable": True,
+                "autoincrement": False,
+            },
+            "total_users": {
+                "type": "INTEGER",
+                "nullable": True,
+                "autoincrement": False,
+            },
+            "started_at": {
+                "type": "TIMESTAMP",
+                "nullable": True,
+                "autoincrement": False,
+            },
+            "last_scrape_at": {
+                "type": "TIMESTAMP",
+                "nullable": True,
+                "autoincrement": False,
+            },
         },
         "primary_key": ("id",),
         "unique_constraints": frozenset(),
         "foreign_keys": frozenset(),
-        "unique_indexes": frozenset(),
+        "indexes": frozenset(),
     },
 }
 
@@ -96,7 +140,11 @@ def describe_actual_schema(inspector: Inspector, table_names) -> dict:
     schema = {}
     for table_name in table_names:
         columns = {
-            col["name"]: {"type": str(col["type"]), "nullable": col["nullable"]}
+            col["name"]: {
+                "type": str(col["type"]),
+                "nullable": col["nullable"],
+                "autoincrement": bool(col.get("autoincrement")),
+            }
             for col in inspector.get_columns(table_name)
         }
         primary_key = tuple(
@@ -115,11 +163,12 @@ def describe_actual_schema(inspector: Inspector, table_names) -> dict:
             for fk in inspector.get_foreign_keys(table_name)
         )
         # Bir unique constraint'in arkasındaki otomatik index'i ayrı bir
-        # unique index gibi saymamak için dışarıda bırakıyoruz.
-        unique_indexes = frozenset(
-            tuple(index["column_names"])
+        # index gibi saymamak için dışarıda bırakıyoruz; hem unique hem
+        # non-unique index'ler (ör. ix_grants_detected_at) dahil.
+        indexes = frozenset(
+            (tuple(index["column_names"]), index["unique"])
             for index in inspector.get_indexes(table_name)
-            if index["unique"] and not index.get("duplicates_constraint")
+            if not index.get("duplicates_constraint")
         )
 
         schema[table_name] = {
@@ -127,7 +176,7 @@ def describe_actual_schema(inspector: Inspector, table_names) -> dict:
             "primary_key": primary_key,
             "unique_constraints": unique_constraints,
             "foreign_keys": foreign_keys,
-            "unique_indexes": unique_indexes,
+            "indexes": indexes,
         }
     return schema
 
@@ -160,6 +209,12 @@ def diff_schema(expected: dict, actual: dict) -> list[str]:
                     f"{table_name}.{column_name}: nullable beklenen="
                     f"{expected_column['nullable']} gerçek={actual_column['nullable']}"
                 )
+            if actual_column["autoincrement"] != expected_column["autoincrement"]:
+                mismatches.append(
+                    f"{table_name}.{column_name}: autoincrement beklenen="
+                    f"{expected_column['autoincrement']} "
+                    f"gerçek={actual_column['autoincrement']}"
+                )
 
         extra_columns = set(actual_table["columns"]) - set(expected_table["columns"])
         for column_name in sorted(extra_columns):
@@ -182,11 +237,11 @@ def diff_schema(expected: dict, actual: dict) -> list[str]:
                 f"(beklenen={sorted(expected_table['foreign_keys'])}, "
                 f"gerçek={sorted(actual_table['foreign_keys'])})"
             )
-        if actual_table["unique_indexes"] != expected_table["unique_indexes"]:
+        if actual_table["indexes"] != expected_table["indexes"]:
             mismatches.append(
-                f"{table_name}: unique index uyuşmuyor "
-                f"(beklenen={sorted(expected_table['unique_indexes'])}, "
-                f"gerçek={sorted(actual_table['unique_indexes'])})"
+                f"{table_name}: index uyuşmuyor "
+                f"(beklenen={sorted(expected_table['indexes'])}, "
+                f"gerçek={sorted(actual_table['indexes'])})"
             )
 
     for table_name in set(actual) - set(expected):
@@ -207,7 +262,15 @@ def main() -> int:
     engine = create_engine(database_url)
     try:
         inspector = inspect(engine)
-        actual = describe_actual_schema(inspector, EXPECTED_SCHEMA.keys())
+        # Sadece beklenen tabloları değil, public schema'daki TÜM tabloları
+        # inceliyoruz; aksi halde diff_schema()'nın "beklenmeyen ekstra
+        # tablo" kontrolü hiçbir zaman tetiklenmez (alembic_version hariç,
+        # o baseline'ın parçası değil, stamp'in kendisi tarafından yazılır).
+        # Eksik bir beklenen tabloyu inspect etmeye çalışıp NoSuchTableError
+        # patlatmamak için sadece gerçekten var olan tabloları describe
+        # ediyoruz; diff_schema() eksik tabloyu zaten kendisi yakalıyor.
+        table_names = set(inspector.get_table_names()) - {"alembic_version"}
+        actual = describe_actual_schema(inspector, table_names)
     finally:
         engine.dispose()
 
