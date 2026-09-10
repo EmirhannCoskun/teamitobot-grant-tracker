@@ -374,6 +374,57 @@ yanlışlıkla bağlanmayı önlemek için hemen hata verir.
 
 Bot ayrıca Render health-check sistemi tarafından kontrol edilebilen bir HTTP health endpoint'i çalıştırır.
 
+### Veritabanı Şema Yönetimi (Alembic)
+
+Şema artık `bot.py` başlangıcındaki `create_all()` ile değil, Alembic migration'larıyla
+yönetilir. `init_db()` artık tablo oluşturmaz; sadece şemanın migrate edildiğini
+doğrular ve migrate edilmemişse net bir hatayla durur.
+
+**⚠️ Render, Heroku'nun aksine Procfile'daki `release:` satırını çalıştırmaz.**
+Migration'ların her deploy'da otomatik uygulanması için Render Dashboard'ında
+servisin Settings sayfasından **"Pre-Deploy Command"** olarak
+`alembic upgrade head` ayarlanmalıdır (bu özellik ücretli planlarda mevcuttur).
+Bu ayar sadece Render erişimi olan biri tarafından yapılabilir.
+
+**⚠️ Tek seferlik cutover adımı:** Yukarıdaki ayar aktif edilmeden/ilk deploy'dan
+önce, gerçek production veritabanına erişimi olan biri şu komutu bir kez elle
+çalıştırmalıdır:
+
+```bash
+DATABASE_URL=<production-url> python scripts/verify_and_stamp_baseline.py
+```
+
+Çıplak `alembic stamp head` KULLANILMAMALIDIR — production şeması baseline'dan
+(kolon/type/nullable/constraint/index) sapmışsa fark edilmeden yanlış revizyon
+işaretlenmiş olur. Bu script önce production şemasını baseline migration'ın
+(`9ffc96b8fba3`) beklediği şemayla karşılaştırır:
+
+* **Eşleşmiyorsa:** hiçbir şey yazmadan durur, farkları listeler (exit code 1).
+  Go/no-go kararı burada — fark varsa production şeması düzeltilmeden stamp
+  uygulanmamalıdır.
+* **Eşleşiyorsa:** `alembic stamp head` çalıştırır.
+
+Bu adım atlanırsa bot, `alembic_version` tablosu bulunamadığı için başlatılamaz. Script
+mevcut tabloları silmez/yeniden oluşturmaz — sadece production'ın zaten baseline
+şemayla (`users`, `grants`, `notifications`, `stats`) uyumlu olduğunu doğrulayıp işaretler.
+
+**⚠️ Bilinen kapsam dışı adım — production şema envanteri:** `verify_and_stamp_baseline.py`
+production'ı baseline migration'dan elle çıkarılmış bir sözleşmeyle (`EXPECTED_SCHEMA`)
+karşılaştırır; gerçek production'ın sanitize edilmiş bir yapı envanteri henüz repository'de
+yok, çünkü ne geliştirme ortamında ne de bu depoya erişen kişilerde gerçek production
+veritabanına erişim var. Production erişimi olan biri, cutover'dan önce (veya sonrasında
+doğrulama amacıyla) şunu bir kez çalıştırıp çıktısını commit etmelidir:
+
+```bash
+DATABASE_URL=<production-url> ENVIRONMENT_ID=render-prod \
+    python scripts/capture_schema_inventory.py > docs/production_schema_inventory.json
+```
+
+Bu script yalnızca tablo/kolon/type/nullable/constraint/index YAPISINI okur — hiçbir satır
+verisi veya secret sorgulamaz/yazmaz. Çıktı; PostgreSQL sürümü, yakalama zamanı, ortam
+kimliği ve şema içeriğinin SHA-256 checksum'ını içerir, böylece envanterin ne zaman/nereden
+alındığı izlenebilir olur.
+
 ### Production davranışı
 
 * 🔍 Hibe sayfası **15 dakikada bir** kontrol edilir
