@@ -27,6 +27,9 @@ EXPECTED_MODULES = (
     "adapters/first_web/__init__.py",
     "infrastructure/__init__.py",
     "infrastructure/config.py",
+    "tools/token_setup/__init__.py",
+    "tools/token_setup/__main__.py",
+    "tools/token_setup/validator.py",
 )
 
 CLEAN_INSTALL_TIMEOUT = 240
@@ -236,6 +239,90 @@ def test_clean_runtime_install_excludes_dev_tools_and_imports(tmp_path):
     assert result.returncode == 0
     assert "IMPORT_OK" in result.stdout
     assert str(REPO_ROOT) not in result.stdout
+
+
+@pytest.mark.timeout(CLEAN_INSTALL_TIMEOUT)
+def test_clean_wheel_install_runs_token_setup_outside_source_tree(tmp_path):
+    wheel_dir = tmp_path / "wheel"
+    wheel_dir.mkdir()
+
+    subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "pip",
+            "wheel",
+            "--no-deps",
+            "--wheel-dir",
+            str(wheel_dir),
+            str(REPO_ROOT),
+        ],
+        check=True,
+        capture_output=True,
+        text=True,
+        timeout=CLEAN_INSTALL_TIMEOUT - 30,
+    )
+
+    wheels = list(wheel_dir.glob("*.whl"))
+    assert len(wheels) == 1
+
+    python = _venv_python(tmp_path / "venv")
+
+    subprocess.run(
+        [
+            str(python),
+            "-m",
+            "pip",
+            "install",
+            "--quiet",
+            str(wheels[0]),
+        ],
+        check=True,
+        capture_output=True,
+        text=True,
+        timeout=CLEAN_INSTALL_TIMEOUT - 30,
+    )
+
+    import_cwd = tmp_path / "import-cwd"
+    import_cwd.mkdir()
+
+    env = {
+        **os.environ,
+        "TELEGRAM_BOT_TOKEN": "",
+    }
+
+    result = subprocess.run(
+        [str(python), "-m", "tools.token_setup"],
+        cwd=import_cwd,
+        env=env,
+        capture_output=True,
+        text=True,
+        timeout=30,
+    )
+
+    assert result.returncode == 1
+    assert "TELEGRAM_BOT_TOKEN is not set in the environment." in result.stderr
+    assert str(REPO_ROOT) not in result.stdout + result.stderr
+
+    module_check = subprocess.run(
+        [
+            str(python),
+            "-c",
+            (
+                "import tools.token_setup, tools.token_setup.validator; "
+                "print(tools.token_setup.__file__); "
+                "print(tools.token_setup.validator.__file__)"
+            ),
+        ],
+        cwd=import_cwd,
+        capture_output=True,
+        text=True,
+        check=True,
+        timeout=30,
+    )
+
+    assert "site-packages" in module_check.stdout
+    assert str(REPO_ROOT) not in module_check.stdout
 
 
 @pytest.mark.timeout(CLEAN_INSTALL_TIMEOUT)
