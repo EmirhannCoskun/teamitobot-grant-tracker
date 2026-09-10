@@ -225,9 +225,105 @@ Telegram getMe
 
 Eski Flask/token-file workflow'u yeni deployment'larda kullanılmamalıdır.
 
-Eski setup uygulamasının archive/delete işlemi ayrı bir repository/workflow kararıdır ve bu dokümanın kapsamında değildir.
+Eski setup uygulamasının archive/delete işlemi, yeni canonical Render workflow'u production'da başarıyla doğrulandıktan sonra ve Software Captain onayıyla ayrı bir repository operasyonu olarak gerçekleştirilmelidir.
 
-## 8. Production Setup Checklist
+## 8. Production Render Operations
+
+Production'daki canonical secret workflow, repository'deki Flask/file-based token setup workflow'undan bağımsız olarak Render environment/secret yönetimi üzerinden yürütülür.
+
+### 8.1 Initial Secret Setup
+
+Production Render service linked to this repository için:
+
+1. Render Dashboard'da production service'i açın.
+2. `Environment` bölümüne gidin.
+3. Environment Variables altında `TELEGRAM_BOT_TOKEN` değişkenini ekleyin veya mevcut değeri güncelleyin.
+4. Token değerini yalnızca Render'ın secret/environment alanına girin.
+5. Değişiklik için `Save and deploy` seçeneğini kullanın. Secret değişikliğinin deploy edilmeden production runtime'a uygulanacağı varsayılmamalıdır.
+6. Deploy tamamlandıktan sonra `Deploys` bölümünden ilgili deploy'un başarılı olduğunu doğrulayın.
+7. Service logs içinde token değerinin görünmediğini kontrol edin.
+
+Render'daki environment variable değişiklikleri için `Save and deploy` mevcut build'i yeni environment değerleriyle yeniden deploy eder. `Save only` seçilirse yeni değer bir sonraki deploy'a kadar service tarafından kullanılmaz.
+
+### 8.2 Token Validation
+
+Gerekirse token, controlled bir operator environment'ında non-persisting validator ile doğrulanabilir:
+
+```bash
+python -m tools.token_setup
+```
+
+Validator token'ı yalnızca `TELEGRAM_BOT_TOKEN` process environment'ından okur.
+
+Token:
+
+* command-line argument olarak verilmemelidir.
+* shell history'ye yazılmamalıdır.
+* source code'a veya repository dosyasına yazılmamalıdır.
+* loglara veya deployment çıktısına yazılmamalıdır.
+
+Production Render environment'ında token'ın kendisini loglamak veya ekrana çıkarmak yerine service'in başarılı şekilde deploy olup startup configuration validation'dan geçmesi doğrulanmalıdır.
+
+### 8.3 Secret Rotation
+
+Telegram bot token'ı rotate edilecekse:
+
+1. Yeni token'ı Telegram tarafındaki yetkili bot yönetim workflow'u üzerinden oluşturun.
+2. Render Dashboard'da production service'in `Environment` bölümünü açın.
+3. `TELEGRAM_BOT_TOKEN` değerini yeni token ile değiştirin.
+4. `Save and deploy` ile değişikliği production'a uygulayın.
+5. Deploy'un başarılı olduğunu `Deploys` bölümünden doğrulayın.
+6. Application logs içinde secret değerinin bulunmadığını kontrol edin.
+7. Botun normal şekilde çalıştığını ve health/status kontrollerinin başarılı olduğunu doğrulayın.
+8. Eski token'ın artık kullanılmadığından emin olun.
+
+Yeni token production'da doğrulanmadan önce eski çalışan configuration kaldırılmamalıdır.
+
+### 8.4 Rollback
+
+Token değişikliği veya ilgili deployment production davranışını bozarsa:
+
+* Öncelikle sorunun secret değerinden mi yoksa application deploy'undan mı kaynaklandığını ayırın.
+* Yanlış veya kullanılamayan token söz konusuysa Render `Environment` bölümündeki `TELEGRAM_BOT_TOKEN` değerini son bilinen çalışan değerle değiştirin ve yeniden deploy edin.
+* Kod değişikliği kaynaklı bir problem varsa Render `Deploys` bölümündeki son başarılı deploy'a rollback yapılabilir.
+* Rollback sonrasında service'in tekrar çalıştığı ve health/status kontrollerinin başarılı olduğu doğrulanmalıdır.
+* Sorun çözülmeden yeni production değişiklikleri uygulanmamalıdır.
+
+Render Dashboard üzerinden önceki başarılı bir deploy'a rollback yapılabilir. Rollback yalnızca uygulama deploy'unu geri almak için kullanılmalı; secret rotation durumunda yanlış token'ın tekrar kullanılmasına neden olacak şekilde düşünülmemelidir.
+
+### 8.5 Cutover from the Deprecated Workflow
+
+Yeni canonical workflow production'da başarıyla doğrulanmadan eski Flask/file-based token setup workflow'u kaldırılmamalıdır.
+
+Cutover sırası:
+
+1. Render environment/secret configuration'ı tamamlayın.
+2. Production service'i yeni canonical configuration ile deploy edin.
+3. Startup configuration validation ve service health durumunu doğrulayın.
+4. `TELEGRAM_BOT_TOKEN` değerinin yalnızca provider environment/secret yönetiminden geldiğini doğrulayın.
+5. Production'ın Flask/token-file workflow'una bağımlı olmadığını doğrulayın.
+6. Başarılı cutover sonrasında eski Flask/file-based setup workflow'unu production configuration kaynağı olarak tamamen devre dışı bırakın.
+7. Eski setup repository'sinin archive veya delete edilmesi gerekiyorsa bu işlem Software Captain onayıyla ayrı bir repository operasyonu olarak gerçekleştirilmelidir.
+
+Eski workflow, yeni canonical workflow başarıyla doğrulanmadan production'dan kaldırılmamalıdır.
+
+### 8.6 Production Secret Checklist
+
+Her secret kurulumu veya rotation işleminden sonra:
+
+* [ ] `TELEGRAM_BOT_TOKEN` Render production service environment'ında tanımlı.
+* [ ] Değişiklik `Save and deploy` ile production'a uygulandı.
+* [ ] Deploy başarıyla tamamlandı.
+* [ ] Service logs içinde token değeri bulunmuyor.
+* [ ] Application startup configuration validation başarılı.
+* [ ] Service health/status kontrolleri başarılı.
+* [ ] Token command-line argument olarak kullanılmadı.
+* [ ] Token repository veya plaintext dosyaya yazılmadı.
+* [ ] Eski Flask/file-based workflow production configuration kaynağı olarak kullanılmıyor.
+* [ ] Rotation işleminde eski tokenın kullanım durumu doğrulandı.
+
+
+## 9. Production Setup Checklist
 
 Production deployment öncesinde:
 
@@ -241,7 +337,7 @@ Production deployment öncesinde:
 * [ ] Validator çıktısında token değeri bulunmadığı kontrol edildi.
 * [ ] Eski Flask/token-file setup workflow'u production configuration kaynağı olarak kullanılmıyor.
 
-## 9. Local Validation
+## 10. Local Validation
 
 Local validation yapılacaksa validator process environment'ındaki `TELEGRAM_BOT_TOKEN` değerini kullanır.
 
@@ -259,7 +355,7 @@ Token, process environment üzerinden sağlanmalıdır.
 
 Windows, Linux veya CI/CD ortamında environment variable'ın nasıl tanımlanacağı kullanılan shell, IDE veya deployment provider'a göre değişebilir. Önemli olan token'ın process environment'a secret olarak aktarılması ve command-line/history, source code veya repository dosyalarına yazılmamasıdır.
 
-## 10. Verification
+## 11. Verification
 
 Token setup değişikliklerinden sonra repository quality gate çalıştırılmalıdır:
 

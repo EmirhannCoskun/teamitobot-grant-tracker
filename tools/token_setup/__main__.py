@@ -32,6 +32,10 @@ MESSAGE_MISSING: Final = f"{TELEGRAM_BOT_TOKEN_ENV} is not set in the environmen
 MESSAGE_FORMAT: Final = (
     f"{TELEGRAM_BOT_TOKEN_ENV} does not have a valid Telegram bot token format."
 )
+MESSAGE_ARGUMENTS: Final = (
+    "Unexpected command-line arguments are not supported; "
+    "set TELEGRAM_BOT_TOKEN in the environment instead."
+)
 
 
 def _read_token() -> str | None:
@@ -51,6 +55,9 @@ def _has_valid_format(token: str) -> bool:
 
 def main() -> int:
     """Run token validation and return a process exit code."""
+    if len(sys.argv) != 1:
+        print(MESSAGE_ARGUMENTS, file=sys.stderr)
+        return EXIT_INVALID
     token = _read_token()
 
     if token is None or not token:
